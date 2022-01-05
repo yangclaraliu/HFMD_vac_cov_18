@@ -5,7 +5,16 @@ path_dropbox <- "C:/Users/eideyliu/Dropbox/EPIC/[Data] China/"
 
 #### shape file####
 shape <- paste0(path_dropbox,"Different Versions of Administrative Boundary/NGMC_2014_INUSE/china_shp.rds") %>% read_rds() %>% st_as_sf
-prv_list <- shape %>% filter(lvl == "prv") %>% as_tibble() %>% dplyr::select(prv, NAME) 
+prv_list <- shape %>% filter(lvl == "prv", prv != 71) %>% 
+  as_tibble() %>% dplyr::select(prv, NAME, PYNAME) %>% 
+  rename(NAME_EN = PYNAME) %>% 
+  mutate(region = substr(prv,1,1))
+
+data.frame(region = unique(prv_list$region),
+           region_label = c("North", "North East", "South East","South",
+                            "South West", "North West")) -> labels_region
+
+
 
 #### CNTY_CODE ####
 CNTY_CODE <- paste0(path_dropbox, "Urbanicity/2017_CNTY_CODE.xlsx") %>% read_excel() %>% 

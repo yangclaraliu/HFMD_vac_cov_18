@@ -97,12 +97,175 @@ outstanding_pop %>%
 
 tmp %>% 
   unite("all_id", pop_source, process, age_structure_source, metric) %>% 
-  mutate(prv_no = substr(CNTY_CODE, 1, 2)) %>% 
-  filter(CNTY_CODE == 110101) %>% 
-  ggplot(., aes(x = all_id, y = cov)) +
-  geom_bar(position = "dodge", stat = "identity") +
-  facet_wrap(~year) +
-  coord_flip()
+  mutate(prv_no = substr(CNTY_CODE, 1, 2), year = factor(year)) %>% 
+  filter(cov <0 | cov > 1) %>%
+  pull(CNTY_CODE) %>% unique  -> to_remove
   
-  geom_histogram() +
-  facet_wrap(~year)
+tmp %>% 
+  unite("APC", year, process) %>% 
+  dplyr::select(-OD, -value) %>% 
+  pivot_wider(names_from = APC, values_from = cov) %>% 
+  pivot_longer(cols = starts_with("2018")) %>% 
+  separate(name, into = c("year", "process")) %>% 
+  rename("2018_val" = value) %>% 
+  select(-year) %>% 
+  filter(CNTY_CODE == "110101",
+         pop_source == "YB",
+         age_structure_source == "YB") %>% View()
+
+
+#### provincial level distribution ####
+p <- list()
+for(i in 1:6){
+  tmp %>% 
+    filter(pop_source == "YB", age_structure_source == "YB", process == "lm",
+           year == 2018, !(CNTY_CODE %in% to_remove)) %>% 
+    mutate(prv_no = substr(CNTY_CODE, 1,2),
+           region = substr(CNTY_CODE,1,1)) %>% 
+    mutate(prv_no = factor(prv_no,
+                           levels = prv_list[prv_list$region == i,]$prv,
+                           labels = prv_list[prv_list$region == i,]$NAME_EN)) %>% 
+    filter(region == i) %>% 
+    left_join(labels_region, by = "region") %>% 
+    ggplot(., aes(y = cov, x = prv_no, color = metric)) +
+    geom_boxplot() +
+    coord_flip() +
+    scale_x_discrete(drop = F,
+                     limits = rev) +
+    lims(y = c(0,1)) +
+    theme_bw() +
+    labs(x = "", y = "Vaccine Coverage in 2018") +
+    facet_grid(~region_label) +
+    theme(legend.position = "none",
+          strip.text = element_text(size = 13, face = "bold")) +
+    ggsci::scale_color_lancet(labels = c("Lower Limits",
+                                         "Upper Limits")) -> p[[i]]
+}
+
+p1 <- plot_grid(p[[1]], p[[2]], p[[3]], ncol = 1,
+                rel_heights = c(5,3,7), align = "v")
+p2 <- plot_grid(p[[4]], p[[5]], p[[6]], ncol = 1,
+                rel_heights = c(5,5,6), align = "v")
+p_legend <- get_legend(p[[1]] + 
+                         labs(color = "") +
+                         theme(legend.position = "top"))
+
+p_save <- plot_grid(p_legend, NA, p1,p2, ncol = 2, rel_heights = c(1,30))  
+
+ggsave(plot = p_save, filename = "figs/pfigures_2.png",
+       height = 8, width = 8)
+
+#### withinin provinces #### 
+tmp %>% 
+  filter(pop_source == "YB", age_structure_source == "YB", process == "lm",
+         year == 2018, !(CNTY_CODE %in% to_remove), metric == "LL") %>% 
+  mutate(prv_no = substr(CNTY_CODE,1,2)) %>% 
+  group_by(prv_no) %>% 
+  summarise(median = median(cov),
+            sd = sd(cov)) %>% 
+  arrange((sd))
+
+p <- list()
+for(i in c(22, 31, 44, 62)){
+  tmp %>% 
+    filter(pop_source == "YB", age_structure_source == "YB", process == "lm",
+           year == 2018, !(CNTY_CODE %in% to_remove)) %>% 
+    mutate(prv_no = substr(CNTY_CODE,1,2)) %>% 
+    filter(prv_no == i) %>% 
+    dplyr::select(-OD) %>% 
+    pivot_wider(names_from = metric, values_from = cov) %>% 
+    right_join(shape %>% 
+                 filter(prv == i,
+                        lvl == "cty"),
+               by = "CNTY_CODE") %>% 
+    st_as_sf() %>% 
+    ggplot(.) +
+    geom_sf(aes(fill = LL)) +
+    scale_fill_gradientn(limits = c(0,0.8),
+                         colours=c("navyblue", "darkmagenta", "darkorange1"),
+                         breaks = c(0, 0.8),
+                         na.value = "grey90") +
+    geom_sf(data = shape %>% 
+              filter(prv == i,
+                     prf == "01",
+                     lvl == "prf"),
+            fill = NA,
+            color = "darkorange1") +
+    theme_cowplot() +
+    labs(title = prv_list %>% 
+           left_join(labels_region,
+                     by = "region") %>% 
+           filter(prv == i) %>% 
+           mutate(NAME_EN = as.character(NAME_EN)) %>% 
+           .[,c("region_label", "NAME_EN")] %>% 
+           unlist %>% 
+           paste(., collapse = "-")) +
+    theme(legend.position = "none") -> p[[i]]
+}
+
+p_legend <- get_legend(p[[31]] + theme(legend.position = "top") + labs(fill = "Vaccine Coverage in 2018:   "))
+p_save <- plot_grid(p_legend, NA,
+                    p[[31]], p[[44]], rel_widths = c(1, 1.62),
+                    rel_heights = c(1,20))
+
+ggsave("figs/pfigure_3.png", width = 15, height = 8)
+
+
+#### sensitivity analysis by data source ####
+p <- list()
+
+tmp %>% 
+  filter(!(CNTY_CODE %in% to_remove),
+         year == 2018) %>% 
+  dplyr::select(-OD, -value)  %>% 
+  pivot_wider(names_from = age_structure_source ,
+              values_from = cov) %>% 
+  filter(process == "lm", pop_source == "YB", metric == "LL") %>% 
+  ggplot(., aes(x = YB, y = ST)) +
+  geom_point(alpha = 0.2) +
+  geom_abline(slope = 1, intercept = 0) +
+  custom_theme +
+  labs(x = "Vaccine Coverage Assuming\nProportional Vaccination Process",
+       y = "Vaccine Coverage Assuming\nTargeted Vaccination Process") -> p[[1]]
+
+tmp %>% 
+  filter(!(CNTY_CODE %in% to_remove),
+         year == 2018) %>% 
+  dplyr::select(-OD, -value)  %>% 
+  pivot_wider(names_from = pop_source  ,
+              values_from = cov) %>% 
+  filter(process == "lm", age_structure_source == "YB", metric == "LL") %>% 
+  mutate(region = substr(CNTY_CODE,1,1),
+         prv_no = substr(CNTY_CODE,1,2)) %>% #,
+  #        diff = sur/YB - 1) %>% 
+  # ggplot(., aes(x = diff)) +
+  # geom_density() +
+  # lims(x = c(-1,5))
+  ggplot(., aes(x = YB, y = sur)) +
+  geom_point(alpha = 0.2) +
+  geom_abline(slope = 1, intercept = 0) +
+  custom_theme +
+  # facet_wrap(~prv_no) +
+  labs(x = "Vaccine CoverageBased on\nYear Book Population",
+       y = "Vaccine CoverageBased on Population\nEstimates in the Surveillance System") -> p[[2]]
+  
+tmp %>% 
+  filter(!(CNTY_CODE %in% to_remove),
+         year == 2018) %>% 
+  dplyr::select(-OD, -value)  %>% 
+  pivot_wider(names_from = process,
+              values_from = cov) %>% 
+  filter(pop_source  == "YB", age_structure_source == "YB", metric == "LL") %>% 
+  mutate(region = substr(CNTY_CODE,1,1),
+         prv_no = substr(CNTY_CODE,1,2)) %>%
+  ggplot(., aes(x = lm, y = con)) +
+  geom_point(alpha = 0.2) +
+  geom_abline(slope = 1, intercept = 0) +
+  custom_theme +
+  labs(x = "Vaccination Coverage Using\nLinear Population Growth Projection",
+       y = "Vaccination Coverage Using\nPlateaued Population Growth") -> p[[3]]
+
+plot_grid(plotlist = p, nrow = 1,
+          labels = c("(a)", "(b)", "(c)")) -> p_save
+
+ggsave("figs/pfigures_4.png", p_save, height = 6, width = 15)
