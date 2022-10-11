@@ -261,7 +261,7 @@ data %<>%
          YB_2016_ob = YB_2016)
 
 custom_theme <-
-  theme_bw() +
+  theme_cowplot() +
   theme(strip.text = element_text(size = 16),
         axis.title = element_text(size = 16),
         axis.text = element_text(size = 14),
@@ -269,3 +269,5 @@ custom_theme <-
         legend.justification = "left",
         legend.text = element_text(size = 12),
         legend.title = element_text(size = 12)) 
+
+colors_region <- ggsci::pal_lancet()(6)
