@@ -2,7 +2,7 @@
 
 pt_imputed <- readRDS("C:/Users/eideyliu/Documents/GitHub/vac2_cov_review/data/pt_imputed.rds") %>% 
   filter(lvl == "cty") %>% 
-  dplyr::select(CNTY_CODE, edu, GDPpc, urban_prop, temp) %>% 
+  dplyr::select(CNTY_CODE, edu, GDPpc, p_child, urban_prop, temp) %>% 
   .[complete.cases(.),]
 
 tmp %>% 
@@ -13,6 +13,9 @@ tmp %>%
   left_join(pt_imputed, by = "CNTY_CODE") %>% 
   .[complete.cases(.),] %>% 
   mutate(region = substr(CNTY_CODE, 1, 1)) -> reg_tab
+
+reg_tab |> 
+  
 
 scientific_10 <- function(x) {
   parse(text=gsub("e", " %*% 10^", scales::scientific_format()(x)))
