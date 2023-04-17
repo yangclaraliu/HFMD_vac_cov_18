@@ -97,14 +97,14 @@ pop %>%
   summarise(tot = sum(tot)) -> pop
 
 pop %>% 
-  filter(ag_LL <= 5, year >= 2016) %>% 
+  filter(ag_LL <= 4, year >= 2016) %>% 
   group_by(year, CNTY_CODE) %>% 
   summarise(pop = sum(tot)) -> POP_05
 
 pop %>% 
   data.table %>% 
   filter(year >= 2016,
-         ag_LL == 5) %>% 
+         ag_LL == 4) %>% 
   left_join(POP_05, by = c("year", "CNTY_CODE")) %>% 
   dplyr::select(-ag_LL) %>% 
   mutate(perc_5 = tot/pop) %>% 
