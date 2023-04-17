@@ -1,6 +1,6 @@
 
 
-pt_imputed <- readRDS("C:/Users/eideyliu/Documents/GitHub/vac2_cov_review/data/pt_imputed.rds") %>% 
+pt_imputed <- readRDS("~/GitHub/vac2_cov_review/data/pt_imputed.rds") %>% 
   filter(lvl == "cty") %>% 
   dplyr::select(CNTY_CODE, edu, GDPpc, urban_prop, temp) %>% 
   .[complete.cases(.),]

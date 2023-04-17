@@ -1,20 +1,6 @@
 if(!require(pacman)) install.packages("pacman")
 p_load(tidyverse, readxl, sf, data.table, magrittr, cowplot, viridis)
-Sys.setlocale("LC_ALL", "Chinese")
-path_dropbox <- "C:/Users/eideyliu/Dropbox/EPIC/[Data] China/"
-
-#### shape file####
-shape <- paste0(path_dropbox,"Different Versions of Administrative Boundary/NGMC_2014_INUSE/china_shp.rds") %>% read_rds() %>% st_as_sf
-prv_list <- shape %>% filter(lvl == "prv", prv != 71) %>% 
-  as_tibble() %>% dplyr::select(prv, NAME, PYNAME) %>% 
-  rename(NAME_EN = PYNAME) %>% 
-  mutate(region = substr(prv,1,1))
-
-data.frame(region = unique(prv_list$region),
-           region_label = c("North", "North East", "South East","South",
-                            "South West", "North West")) -> labels_region
-
-
+path_dropbox <- "~/Dropbox/EPIC/[Data] China/"
 
 #### CNTY_CODE ####
 CNTY_CODE <- paste0(path_dropbox, "Urbanicity/2017_CNTY_CODE.xlsx") %>% read_excel() %>% 
@@ -24,14 +10,63 @@ CNTY_CODE <- paste0(path_dropbox, "Urbanicity/2017_CNTY_CODE.xlsx") %>% read_exc
                             `市级代码`,
                             `县级代码`))
 
+#### shape file####
+prefectures <- paste0(path_dropbox,"Different Versions of Administrative Boundary/CCDC2022/dishi.shp") %>% sf::read_sf()
+counties <- paste0(path_dropbox,"Different Versions of Administrative Boundary/CCDC2022/quxian.shp") %>% sf::read_sf()
+provinces <-  paste0(path_dropbox,"Different Versions of Administrative Boundary/CCDC2022/sheng.shp") %>% sf::read_sf()
+
+provinces %>% 
+  mutate(code_prv = substr(ZONECODE,1,2)) %>% 
+  dplyr::filter(!code_prv %in% c(71, 81, 82)) %>% 
+  dplyr::select(code_prv, NAME, PYNAME) %>% 
+  rename(NAME_EN = PYNAME) %>% 
+  mutate(region = substr(code_prv, 1, 1)) %>% 
+  separate(NAME_EN, into = c("seg1", "seg2", "seg3")) %>% 
+  dplyr::select(-seg2, -seg3) %>% 
+  rename(NAME_EN = seg1) %>% 
+  mutate(region = factor(region,
+                         levels = 1:6,
+                         labels = c("North", "North East", "South East","South",
+                                    "South West", "North West"))) -> shape_prv
+
+counties %>% 
+  dplyr::select(NAME, PYNAME, CNTY_CODE) %>% 
+  mutate(CNTY_CODE = substr(CNTY_CODE, 1,6),
+         code_prv = substr(CNTY_CODE, 1, 2),
+         code_prf = substr(CNTY_CODE, 3, 4),
+         code_cty = substr(CNTY_CODE, 5,6)) %>% 
+  dplyr::filter(code_cty != "00") -> shape_cty
+
 #### population age structure ####
 pop <- read_rds(paste0(path_dropbox, "Pop_all/cdc_pop_res_cty.rds")) %>% 
   .[,c(1,5,6,9)] %>% 
   setNames(c("CNTY_CODE", "year", "age_group", "tot")) %>% 
   mutate(CNTY_CODE = substr(CNTY_CODE,1,6),
-         ag_LL = parse_number(as.character(age_group)))
+         ag_LL = parse_number(as.character(age_group))) %>% 
+  dplyr::filter(year != 2018)
 
-pop_missing <- data.table(CNTY_CODE_missing = sort(unique(pop$CNTY_CODE))[which(!(sort(unique(pop$CNTY_CODE)) %in% shape$CNTY_CODE))])
+pop_2018 <- read_xlsx(paste0(path_dropbox, "China_POP_2018.xlsx")) %>% 
+  setNames(c("year", "CNTY_CODE", "location", "age_group", "male", "female","tot")) %>% 
+  mutate(CNTY_CODE = as.character(CNTY_CODE),
+         n_CNTY_CODE = nchar(CNTY_CODE)) %>% 
+  dplyr::filter(n_CNTY_CODE >= 6) %>% 
+  mutate(CNTY_CODE = substr(CNTY_CODE, 1,  6),
+         code_prv = substr(CNTY_CODE, 1, 2),
+         code_prf = substr(CNTY_CODE, 3, 4),
+         code_cty = substr(CNTY_CODE, 5, 6),
+         age_group = as.character(age_group),
+         ag_LL = parse_number(age_group)) %>% 
+  dplyr::filter(code_prf != "00",
+                code_cty != "00") %>% 
+  dplyr::select(CNTY_CODE, year, age_group, tot, ag_LL)
+
+bind_rows(pop, pop_2018) %>% 
+  mutate(code_prv = substr(CNTY_CODE, 1, 2),
+         code_prf = substr(CNTY_CODE, 3, 4),
+         code_cty = substr(CNTY_CODE, 5, 6)) -> pop
+
+pop_missing <- data.table(CNTY_CODE_missing = sort(unique(pop$CNTY_CODE))[which(!(sort(unique(pop$CNTY_CODE)) %in% shape_cty$CNTY_CODE))])
+
 pop_missing %<>% 
   left_join(CNTY_CODE, by = c("CNTY_CODE_missing" = "CNTY_CODE")) %>% 
   filter(!is.na(`省级代码`)) %>% 
@@ -39,11 +74,12 @@ pop_missing %<>%
          CNTY_CODE_new = NA)
 
 for(i in 1:nrow(pop_missing)){
-  tmp <- shape[grep(pop_missing$sn[i], shape$NAME),]
+  tmp <- shape_cty[grep(pop_missing$sn[i], shape_cty$NAME),]
   if(nrow(tmp) == 1) pop_missing$CNTY_CODE_new[i] <- tmp$CNTY_CODE
 }
 
 pop_missing %<>% filter(!is.na(CNTY_CODE_new))
+
 for(i in 1:nrow(pop_missing)){
   pop %<>% 
     mutate(CNTY_CODE = if_else(CNTY_CODE == pop_missing$CNTY_CODE_missing[i],
@@ -51,10 +87,14 @@ for(i in 1:nrow(pop_missing)){
                                CNTY_CODE))
 }
 
-which((pop$CNTY_CODE %>% unique) %in% shape$CNTY_CODE) %>% length -> n_find
+which((pop$CNTY_CODE %>% unique) %in% shape_cty$CNTY_CODE) %>% length -> n_find
 ((pop$CNTY_CODE %>% unique)) %>% length -> n_tot
-# location that cannot be found is roughly 8.5%
+# location that cannot be found is roughly 15.6%
 1 - n_find/n_tot
+
+pop %>% 
+  group_by(CNTY_CODE, year, ag_LL) %>% 
+  summarise(tot = sum(tot)) -> pop
 
 pop %>% 
   filter(ag_LL <= 5, year >= 2016) %>% 
@@ -66,8 +106,7 @@ pop %>%
   filter(year >= 2016,
          ag_LL == 5) %>% 
   left_join(POP_05, by = c("year", "CNTY_CODE")) %>% 
-  dplyr::select( -age_group, -ag_LL) %>% 
-  filter(year != 2018) %>% 
+  dplyr::select(-ag_LL) %>% 
   mutate(perc_5 = tot/pop) %>% 
   dplyr::select(CNTY_CODE, year, perc_5) -> POP_R_5
   
@@ -76,12 +115,12 @@ raw <- list()
 for(i in 1:2){
   paste0(path_dropbox, "[Data] HFMD/2016-2018 data of vaccine inoculation/2016-2018 data of vaccine inoculation 0712.xlsx") %>% readxl::read_excel(sheet = i, col_types = "text") -> raw[[i]]
 }
+raw[[1]] <- raw[[1]][-1,]
 raw_save <- raw
 
 # APC = age appropriate children
 # 441901, 442001, 441900
 raw[[1]] %<>% 
-  .[-1,] %>% 
   .[,c(2,3,6,7,9,10,12)] %>% 
   setNames(c("NAME_prf","NAME_cty", "CNTY_CODE",
              "APC_2016","d2_2016",
@@ -91,8 +130,11 @@ raw[[1]] %<>%
          APC_2016 = if_else(APC_2016 == "-",
                             as.character(NA),
                             APC_2016)) %>% 
-  left_join(prv_list, by = "prv") %>% 
-  rename(NAME_prv = NAME) %>% 
+  left_join(shape_prv %>% 
+              data.frame %>% 
+              .[,1:3], 
+            by = c("prv" = "code_prv")) %>% 
+  rename(NAME_prv = NAME_EN) %>% 
   dplyr::filter(!is.na(CNTY_CODE) & CNTY_CODE != "0" & CNTY_CODE != "无编码")
 
 raw[[1]] %<>% 
@@ -121,7 +163,7 @@ raw[[2]] %<>%
 raw[[1]] %>% 
   left_join(raw[[2]], by = "CNTY_CODE") -> data
 
-data.table(CNTY_CODE_missing = data[which(!(data$CNTY_CODE %in% shape$CNTY_CODE)),]$CNTY_CODE) %>% 
+data.table(CNTY_CODE_missing = data[which(!(data$CNTY_CODE %in% shape_cty$CNTY_CODE)),]$CNTY_CODE) %>% 
   mutate(NAME_prv = as.character(NA),
          NAME_prf = as.character(NA),
          NAME_cty = as.character(NA)) -> missing
@@ -143,27 +185,27 @@ for(i in 1:nrow(missing)){
  
 missing %<>% 
   mutate(sn = substr(NAME_cty,1,2), CNTY_CODE_new = NA) %>% 
-  left_join(prv_list, by = c("NAME_prv" = "NAME"))  %>% 
-  mutate(prv = if_else(NAME_prv == "广西省",
+  left_join(shape_prv, by = c("NAME_prv" = "NAME"))  %>% 
+  mutate(code_prv = if_else(NAME_prv == "广西省",
                        "45",
-                       prv),
-         prv = if_else(NAME_prv == "宁夏",
+                       code_prv),
+         code_prv = if_else(NAME_prv == "宁夏",
                        "62",
-                       prv),
-         prv = if_else(NAME_prv == "吉林",
+                       code_prv),
+         code_prv = if_else(NAME_prv == "吉林",
                        "22",
-                       prv),
-         prv = if_else(NAME_prf == "唐山市",
+                       code_prv),
+         code_prv = if_else(NAME_prf == "唐山市",
                        "13",
-                       prv),
-         prv = if_else(NAME_prf == "常德市",
+                       code_prv),
+         code_prv = if_else(NAME_prf == "常德市",
                        "43",
-                       prv)
+                       code_prv)
   ) 
 
 for(i in 1:nrow(missing)){
-  tmp <- shape[grep(missing$sn[i], shape$NAME),c("CNTY_CODE","prv")] %>% 
-    dplyr::filter(prv  == missing$prv[i])
+  tmp <- shape_cty[grep(missing$sn[i], shape_cty$NAME),c("CNTY_CODE","code_prv")] %>% 
+    dplyr::filter(code_prv  == missing$code_prv[i])
   if(nrow(tmp) == 1) missing$CNTY_CODE_new[i] <- tmp$CNTY_CODE
 }
 
@@ -194,23 +236,32 @@ data %>%
             d2_2017 = sum(d2_2017, na.rm = T),
             d2_2018 = sum(d2_2018, na.rm = T)) %>% unlist %>% sum -> doses_tot
 
-# approximately 1.6% doses cannot be geocoded
+# approximately 3.5% doses cannot be geocoded
 doses_missed/doses_tot
 
-# 
-data %>% 
-  mutate(CNTY_CODE = case_when(CNTY_CODE == "441900" ~ "441901",
-                               CNTY_CODE == "442000" ~ "442001",
-                               TRUE ~ CNTY_CODE)) %>% 
-  filter(!is.na(CNTY_CODE)) %>% 
-  left_join(POP_05 %>% 
-              pivot_wider(names_from = year,
-                          values_from = pop),
-            by = "CNTY_CODE") %>%
-  filter(!is.na(d2_2016) & !is.na(d2_2017) & !is.na(d2_2018) & !is.na(APC_2016) & !is.na(APC_2017) &
-           !is.na(`2017`) & !is.na(`2018`) & !is.na(`2016`)) %>%
-  left_join(shape, by = "CNTY_CODE") %>%
-  pull(lvl) %>% table
+data %<>% 
+  group_by(CNTY_CODE) %>% 
+  summarise(APC_2016 = sum(APC_2016),
+            APC_2017 = sum(APC_2017),
+            d2_2016 = sum(d2_2016),
+            d2_2017 = sum(d2_2017),
+            d2_2018 = sum(d2_2018)) %>% 
+  .[complete.cases(.),]
+
+
+# data %>% 
+#   mutate(CNTY_CODE = case_when(CNTY_CODE == "441900" ~ "441901",
+#                                CNTY_CODE == "442000" ~ "442001",
+#                                TRUE ~ CNTY_CODE)) %>% 
+#   filter(!is.na(CNTY_CODE)) %>% 
+#   left_join(POP_05 %>% 
+#               pivot_wider(names_from = year,
+#                           values_from = pop),
+#             by = "CNTY_CODE") %>%
+#   filter(!is.na(d2_2016) & !is.na(d2_2017) & !is.na(d2_2018) & !is.na(APC_2016) & !is.na(APC_2017) &
+#            !is.na(`2017`) & !is.na(`2018`) & !is.na(`2016`)) %>%
+#   left_join(shape_cty, by = "CNTY_CODE") %>%
+#   pull(lvl) %>% table
 
 # attach registered children
 
@@ -219,46 +270,43 @@ data %>%
   pivot_longer(cols = starts_with("d2", ignore.case = F)) %>% 
   separate(name, into = c("dose", "year")) %>% 
   dplyr::select(-dose) %>% 
+
   mutate(year = as.numeric(year)) %>% 
-  left_join(POP_05 %>% filter(year != 2018), by = c("CNTY_CODE", "year"))
+  left_join(POP_05, by = c("CNTY_CODE", "year"))
 
-
-pop %>% 
-  filter(# year > 2015 & 
-    # year != 2018 & 
-    age_group %in% paste0(0:5,"-")) %>% 
-  dplyr::select(-ag_LL) %>% 
-  # group_by(CNTY_CODE, year, age_group) %>% tally %>% filter(n != 1) #%>% 
-  filter(!(CNTY_CODE %in% c(450122, 441325, 330322, 500227))) %>% 
+APC_YB <- pop %>% 
+  filter(ag_LL %in% 0:5) %>% 
+  dplyr::select(-ag_LL) %>%   
+  filter(year >= 2016) %>% 
+  group_by(CNTY_CODE, year) %>% 
+  summarise(APC = sum(tot)) %>% 
   pivot_wider(names_from = year,
-              values_from = tot)
+              values_from = APC) %>% 
+  setNames(c("CNTY_CODE", "YB_2016", "YB_2017", "YB_2018"))
 
-APC_YB <- qs::qread("Data/APC_YB.qs")
 APC_sur <- qs::qread("data/APC_sur.qs")
 
 data %<>% 
-  left_join(APC_YB %>% 
-              pivot_wider(names_from = year,
-                          values_from = APC) %>% 
-              dplyr::select(-`2019`) %>% 
-              setNames(c("CNTY_CODE", "YB_2016", "YB_2017", "YB_2018")),
-            by = "CNTY_CODE")
-
-
-data %<>% 
+  left_join(APC_YB,
+            by = "CNTY_CODE") %>% 
   # we believe it's errors when d2_2016 and d2_2017 are not 0s but d2_2018 is
   filter(!(d2_2016 != 0 & d2_2017 != 0 & d2_2018 == 0)) %>% 
   filter(!is.na(YB_2016) & !is.na(YB_2017) & !is.na(YB_2018))
 
+# data %<>% 
+#   right_join(APC_sur, by = "CNTY_CODE") %>%
+#   .[complete.cases(.),] %>% 
+#   rename(YB_2018_lm = YB_2018,
+#          YB_2018_con = YB_2017,
+#          YB_2017_ob = YB_2017,
+#          YB_2016_ob = YB_2016)
 
 data %<>% 
-  dplyr::select(-starts_with("APC")) %>% 
-  right_join(APC_sur, by = "CNTY_CODE") %>%
+  left_join(APC_sur[,c(1,2,5)],
+            by = "CNTY_CODE") %>% 
   .[complete.cases(.),] %>% 
-  rename(YB_2018_lm = YB_2018,
-         YB_2018_con = YB_2017,
-         YB_2017_ob = YB_2017,
-         YB_2016_ob = YB_2016)
+  rename(APC_2018_lm = APC_sur_2018_lm,
+         APC_2018_con = APC_sur_2018_con)
 
 custom_theme <-
   theme_cowplot() +

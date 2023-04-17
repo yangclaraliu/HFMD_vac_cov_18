@@ -163,34 +163,49 @@
 #               setNames(c("CNTY_CODE", "YB_2016", "YB_2017", "YB_2018")),
 #             by = "CNTY_CODE")
 
-data %>%
+
+data %>% 
   dplyr::select(CNTY_CODE, starts_with("APC")) %>%
   filter(APC_2016 > 100 & APC_2017 > 100,
          !(CNTY_CODE %in% c(130109, 330111, 370312))) %>%
   pivot_longer(starts_with("APC")) %>%
   separate(name, into = c("metric", "year")) %>%
   mutate(year = as.numeric(year),
-          prv_no = substr(CNTY_CODE, 1, 2)) %>%
-  group_by(CNTY_CODE) %>% group_split() -> reg_tab
-  # ggplot(., aes(x = year, y = value, group = CNTY_CODE)) +
-  # geom_line() +
-  # facet_wrap(~prv_no)
+         code_prv = substr(CNTY_CODE, 1, 2)) -> reg_tab_1
+  
+data %>% 
+  dplyr::select(CNTY_CODE, starts_with("YB")) %>%
+  filter(!(CNTY_CODE %in% c(130109, 330111, 370312))) %>%
+  pivot_longer(starts_with("YB")) %>%
+  separate(name, into = c("metric", "year")) %>%
+  mutate(year = as.numeric(year),
+         code_prv = substr(CNTY_CODE, 1, 2))  -> reg_tab_2
 
-  model <- list()
-  for(i in 1:length(reg_tab)){
-    model[[i]] <- lm(value ~ year, data = reg_tab[[i]])
-  }
+reg_tab_1 %>% 
+  rename(SUR = value) %>% 
+  dplyr::select(-metric) %>% 
+  left_join(reg_tab_2 %>% 
+              rename(YB = value) %>% 
+              dplyr::select(-metric),
+            by = c("CNTY_CODE", "year", "code_prv")) %>%
+  group_by(CNTY_CODE) %>% 
+  group_split() -> reg_tab
 
-  res <- list()
-  for(i in 1:length(reg_tab)){
+model <- list()
+for(i in 1:length(reg_tab)){
+    model[[i]] <- glm(SUR ~ year, data = reg_tab[[i]])
+}
+
+res <- list()
+for(i in 1:length(reg_tab)){
     reg_tab[[i]]$CNTY_CODE %>% unique %>%
       map(~predict(model[[i]],newdata = CJ(CNTY_CODE = ., year = c(2018)))) %>%
       setNames(reg_tab[[i]]$CNTY_CODE %>% unique) %>%
       map(data.table) %>% map(rownames_to_column) %>%
       bind_rows(.id = "CNTY_CODE") %>%
-      rename(value = V1, year = rowname) %>%
+      rename(SUR = V1, year = rowname) %>%
       mutate(year = 2018, status = "predicted") %>%
-      bind_rows(reg_tab[[i]][,c("CNTY_CODE", "year", "value")] %>%
+      bind_rows(reg_tab[[i]][,c("CNTY_CODE", "year", "SUR")] %>%
                   mutate(status = "observed")) -> res[[i]]
   }
   
@@ -222,7 +237,7 @@ data %>%
   APC_surveillance %>% 
     dplyr::select(-status) %>% 
     pivot_wider(names_from = year,
-                values_from = value) %>%
+                values_from = SUR) %>%
     mutate(APC_sur_2018_con = `2017`) %>% 
     rename(APC_sur_2016_ob = `2016`,
            APC_sur_2017_ob = `2017`,
