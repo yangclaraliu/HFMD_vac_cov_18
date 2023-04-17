@@ -1,5 +1,3 @@
-EV71_Lit <- readRDS("data/EV71_Lit.rds") %>% 
-  filter(!(Age_LL_value == 0 & Age_UL_value %in% c(5,6)))
 
 EV71_Lit %>% 
   ggplot(., aes(x = Age_LL_value, y = cov)) +
@@ -8,18 +6,17 @@ EV71_Lit %>%
   facet_wrap(~index)
 
 pop %>% 
-  filter(CNTY_CODE == 510723,
+  filter(CNTY_CODE == 510722,
          year == 2017,
-         age_group %in% paste0(0:5, "-")) %>% 
+         ag_LL %in% paste0(0:4)) %>% 
   mutate(all = sum(tot),
          tot_p = tot/all,
-         cov = case_when(age_group == "0-" ~ 64.5/420,
-                         age_group == "1-" ~ 129/420,
-                         age_group == "2-" ~ 78/420, 
-                         age_group == "3-" ~ 33/420,
-                         age_group == "4-" ~ 33/420,
-                         age_group == "5-" ~ 33/420)) %>% 
-  dplyr::select(age_group, cov) -> tmp
+         cov = case_when(ag_LL == "0" ~ 0/420,
+                         ag_LL == "1" ~ 161/420,
+                         ag_LL == "2" ~ 109/420, 
+                         ag_LL == "3" ~ 53/420,
+                         ag_LL == "4" ~ 33/420)) %>% 
+  dplyr::select(ag_LL, cov) -> tmp
 
 
 pop %>% 
