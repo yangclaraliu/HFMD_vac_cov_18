@@ -64,7 +64,7 @@ data %>%
   dplyr::select(-seg) -> coverage_alt_1
 
 EV71_Lit[[2]] %>% 
-  dplyr::select(Age_LL_value, denominator, numerator) %>% 
+  dplyr::select(Age_LL_value, denominator, numerator, CNTY_CODE) %>% 
   mutate(perc_5 = numerator/denominator) %>%
   add_row(.[2,] %>% mutate(Age_LL_value = 2)) %>% 
   mutate(denominator = if_else(Age_LL_value %in% 1:2, 0.5*denominator, denominator),
@@ -73,9 +73,13 @@ EV71_Lit[[2]] %>%
   add_row(.[3,] %>% mutate(Age_LL_value = 5))%>% 
   mutate(denominator = if_else(Age_LL_value %in% 3:5, 0.33*denominator, denominator),
          numerator = if_else(Age_LL_value %in% 3:5, 0.33*numerator, numerator)) %>% 
-  mutate(perc_5 = numerator/denominator) %>% 
-  arrange(Age_LL_value) %>% 
-  mutate(perc_5 = numerator/sum(numerator)) %>% 
+  mutate(cov = numerator/denominator) %>% 
+  arrange(Age_LL_value) %>%
+  left_join(pop %>% dplyr::filter(CNTY_CODE == "330205", year == 2018, ag_LL %in% 0:5),
+            by = c("CNTY_CODE",
+                   "Age_LL_value" = "ag_LL")) %>% 
+  mutate(doses = tot*cov,
+         perc_5 = doses/sum(doses)) %>% 
   mutate(year = c(NA, NA, NA, 2018, 2017, 2016)) %>% 
   dplyr::filter(!is.na(year)) %>% 
   dplyr::select(year, perc_5) %>% 

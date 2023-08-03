@@ -1,7 +1,7 @@
 if(!require(pacman)) install.packages("pacman")
 p_load(tidyverse, readxl, sf, data.table, magrittr, cowplot, viridis)
 path_dropbox <- "~/Dropbox/EPIC/[Data] China/"
-
+path_dropbox_github <- "~/Dropbox/Github_Data/HFMD_cov_2019/"
 #### CNTY_CODE ####
 CNTY_CODE <- paste0(path_dropbox, "Urbanicity/2017_CNTY_CODE.xlsx") %>% read_excel() %>% 
   .[,c(1:3,6:8)] %>% 
@@ -37,79 +37,12 @@ counties %>%
          code_cty = substr(CNTY_CODE, 5,6)) %>% 
   dplyr::filter(code_cty != "00") -> shape_cty
 
+target_province <- read_rds(paste0(path_dropbox_github, "prv_data_exist.rds"))
+
 #### population age structure ####
-pop <- read_rds(paste0(path_dropbox, "Pop_all/cdc_pop_res_cty.rds")) %>% 
-  .[,c(1,5,6,9)] %>% 
-  setNames(c("CNTY_CODE", "year", "age_group", "tot")) %>% 
-  mutate(CNTY_CODE = substr(CNTY_CODE,1,6),
-         ag_LL = parse_number(as.character(age_group))) %>% 
-  dplyr::filter(year != 2018)
+# this document only contains counties of the 23 provinces with inoculation data
+pop_all <- read_rds(paste0(path_dropbox_github, "pop_tar.rds"))
 
-pop_2018 <- read_xlsx(paste0(path_dropbox, "China_POP_2018.xlsx")) %>% 
-  setNames(c("year", "CNTY_CODE", "location", "age_group", "male", "female","tot")) %>% 
-  mutate(CNTY_CODE = as.character(CNTY_CODE),
-         n_CNTY_CODE = nchar(CNTY_CODE)) %>% 
-  dplyr::filter(n_CNTY_CODE >= 6) %>% 
-  mutate(CNTY_CODE = substr(CNTY_CODE, 1,  6),
-         code_prv = substr(CNTY_CODE, 1, 2),
-         code_prf = substr(CNTY_CODE, 3, 4),
-         code_cty = substr(CNTY_CODE, 5, 6),
-         age_group = as.character(age_group),
-         ag_LL = parse_number(age_group)) %>% 
-  dplyr::filter(code_prf != "00",
-                code_cty != "00") %>% 
-  dplyr::select(CNTY_CODE, year, age_group, tot, ag_LL)
-
-bind_rows(pop, pop_2018) %>% 
-  mutate(code_prv = substr(CNTY_CODE, 1, 2),
-         code_prf = substr(CNTY_CODE, 3, 4),
-         code_cty = substr(CNTY_CODE, 5, 6)) -> pop
-
-pop_missing <- data.table(CNTY_CODE_missing = sort(unique(pop$CNTY_CODE))[which(!(sort(unique(pop$CNTY_CODE)) %in% shape_cty$CNTY_CODE))])
-
-pop_missing %<>% 
-  left_join(CNTY_CODE, by = c("CNTY_CODE_missing" = "CNTY_CODE")) %>% 
-  filter(!is.na(`省级代码`)) %>% 
-  mutate(sn = substr(`县（区、市、旗）`,1,2),
-         CNTY_CODE_new = NA)
-
-for(i in 1:nrow(pop_missing)){
-  tmp <- shape_cty[grep(pop_missing$sn[i], shape_cty$NAME),]
-  if(nrow(tmp) == 1) pop_missing$CNTY_CODE_new[i] <- tmp$CNTY_CODE
-}
-
-pop_missing %<>% filter(!is.na(CNTY_CODE_new))
-
-for(i in 1:nrow(pop_missing)){
-  pop %<>% 
-    mutate(CNTY_CODE = if_else(CNTY_CODE == pop_missing$CNTY_CODE_missing[i],
-                               pop_missing$CNTY_CODE_new[i],
-                               CNTY_CODE))
-}
-
-which((pop$CNTY_CODE %>% unique) %in% shape_cty$CNTY_CODE) %>% length -> n_find
-((pop$CNTY_CODE %>% unique)) %>% length -> n_tot
-# location that cannot be found is roughly 15.6%
-1 - n_find/n_tot
-
-pop %>% 
-  group_by(CNTY_CODE, year, ag_LL) %>% 
-  summarise(tot = sum(tot)) -> pop
-
-pop %>% 
-  filter(ag_LL <= 4, year >= 2016) %>% 
-  group_by(year, CNTY_CODE) %>% 
-  summarise(pop = sum(tot)) -> POP_05
-
-pop %>% 
-  data.table %>% 
-  filter(year >= 2016,
-         ag_LL == 4) %>% 
-  left_join(POP_05, by = c("year", "CNTY_CODE")) %>% 
-  dplyr::select(-ag_LL) %>% 
-  mutate(perc_5 = tot/pop) %>% 
-  dplyr::select(CNTY_CODE, year, perc_5) -> POP_R_5
-  
 ### inoculation #####
 raw <- list()
 for(i in 1:2){
@@ -265,14 +198,13 @@ data %<>%
 
 # attach registered children
 
-data %>% 
-  dplyr::select(-starts_with("APC", ignore.case = F)) %>% 
-  pivot_longer(cols = starts_with("d2", ignore.case = F)) %>% 
-  separate(name, into = c("dose", "year")) %>% 
-  dplyr::select(-dose) %>% 
-
-  mutate(year = as.numeric(year)) %>% 
-  left_join(POP_05, by = c("CNTY_CODE", "year"))
+# data %>% 
+#   dplyr::select(-starts_with("APC", ignore.case = F)) %>% 
+#   pivot_longer(cols = starts_with("d2", ignore.case = F)) %>% 
+#   separate(name, into = c("dose", "year")) %>% 
+#   dplyr::select(-dose) %>% 
+#   mutate(year = as.numeric(year)) %>% 
+#   left_join(POP_05, by = c("CNTY_CODE", "year"))
 
 APC_YB <- pop %>% 
   filter(ag_LL %in% 0:5) %>% 
@@ -319,3 +251,5 @@ custom_theme <-
         legend.title = element_text(size = 12)) 
 
 colors_region <- ggsci::pal_lancet()(6)
+
+write_rds(data, "data/intermediate/tab.rds")
