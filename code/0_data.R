@@ -45,16 +45,45 @@ pop_all <- read_rds(paste0(path_dropbox_github, "pop_tar.rds")) %>%
   pivot_longer(cols = starts_with("20"),
                names_to = "year",
                values_to = "pop")
-pop_all[!(pop_all$CNTY_CODE %in% shape_cty$CNTY_CODE),] %>% 
-  arrange(CNTY_CODE, ag_LL) 
+
+APC <- pop_all %>% 
+  dplyr::filter(ag_LL < 5) %>% 
+  group_by(CNTY_CODE, code_prv, year) %>% 
+  summarise(APC = sum(pop)) %>% 
+  mutate(year = as.numeric(year))
+
+pop_all %>% 
+  group_by(CNTY_CODE, code_prv, year) %>% 
+  summarise(tot = sum(pop)) %>% 
+  mutate(year = as.numeric(year)) %>% 
+  left_join(APC,
+            by = c("CNTY_CODE",
+                   "code_prv",
+                   "year")) %>% 
+  dplyr::filter(!is.na(APC)) -> APC
+
+pop_all[,"CNTY_CODE"] %>% 
+  distinct() %>% 
+  dplyr::filter(CNTY_CODE %in% shape_cty$CNTY_CODE)
 # 93% locations have been found in the shape file
 
 #### inoculation #####
-vac_all <- read_rds(paste(path_dropbox_github, "vac_all.rds"))
+vac_all <- read_rds(paste(path_dropbox_github, "vac_all.rds")) %>% 
+  rename(CNTY_CODE = CNTY_CODE_shape,
+         code_prv = code_prf)
 
 # merge tables 
-
-
+vac_all %>% 
+  left_join(APC, by = c("CNTY_CODE", "year", "code_prv")) %>% 
+  ungroup %>% 
+  dplyr::filter(!is.na(APC)) %>% 
+  group_by(year) %>% 
+  mutate(p_risk = APC/tot,
+         APC_national = sum(APC),
+         tot_national = sum(tot),
+         p_risk_national = APC_national/tot_national) %>% 
+  dplyr::select(-APC_national,
+                -tot_national) -> tab
 
 custom_theme <-
   theme_cowplot() +
@@ -67,5 +96,3 @@ custom_theme <-
         legend.title = element_text(size = 12)) 
 
 colors_region <- ggsci::pal_lancet()(6)
-
-write_rds(data, "data/intermediate/tab.rds")
