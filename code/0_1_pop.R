@@ -160,14 +160,21 @@ bind_rows(missing_found,
 # xlsx::write(tmp, paste0(path_dropbox_github, "pop_names_fix.xlsx"))
 
 # check year to year changes
-pop_all %<>% 
+pop_all %>% 
+  group_by(CNTY_CODE) %>% 
+  summarise(`2016` = sum(`2016`),
+            `2017` = sum(`2017`),
+            `2018` = sum(`2018`),
+            `2019` = sum(`2019`)) %>% 
   mutate(r1 = `2017`/`2016`,
          r2 = `2018`/`2017`,
          r3 = `2019`/`2018`) %>% 
-  filter(r1 < 1.25 & r2 < 1.25 & r3 < 1.25 & r1 > 0.75 & r2 > 0.75 & r3 > 0.75)
+  filter(r1 > 1.25 | r2 > 1.25 | r3 > 1.25 | r1 < 0.75 | r2 < 0.75 | r3 < 0.75) %>% 
+  pull(CNTY_CODE) -> to_remove
 
-2279/2474
+pop_all %>% 
+  dplyr::filter(!CNTY_CODE %in% to_remove) -> to_save
 
-write_rds(pop_all,
+write_rds(to_save,
           file = paste0(path_dropbox_github, "pop_tar.rds"))
 
