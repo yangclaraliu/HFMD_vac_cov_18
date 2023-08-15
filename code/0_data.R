@@ -39,6 +39,17 @@ counties %>%
 
 target_province <- read_rds(paste0(path_dropbox_github, "prv_data_exist.rds"))
 
+labels_region <- data.frame(labels_region = 1:6,
+                            names_region = c(
+                              "Huabei\n(North)",
+                              "Xibei\n(Northwest)",
+                              "Dongbei\n(Northeast)",
+                              "Huadong\n(East)",
+                              "Zhongnan\n(South)",
+                              "Xinan\n(Southwest)"
+                            ))
+
+
 #### population age structure ####
 # this document only contains counties of the 23 provinces with inoculation data
 pop_all <- read_rds(paste0(path_dropbox_github, "pop_tar.rds")) %>% 
@@ -60,11 +71,15 @@ pop_all %>%
             by = c("CNTY_CODE",
                    "code_prv",
                    "year")) %>% 
-  dplyr::filter(!is.na(APC)) -> APC
+  dplyr::filter(!is.na(APC)) %>% 
+  mutate(p_risk = APC/tot,
+         label_region = substr(CNTY_CODE, 1, 1)) %>% 
+  group_by(year) %>% 
+  mutate(p_risk_national = sum(APC)/sum(tot)) -> APC
 
-pop_all[,"CNTY_CODE"] %>% 
-  distinct() %>% 
-  dplyr::filter(CNTY_CODE %in% shape_cty$CNTY_CODE)
+# pop_all[,"CNTY_CODE"] %>% 
+#   distinct() %>% 
+#   dplyr::filter(CNTY_CODE %in% shape_cty$CNTY_CODE)
 # 93% locations have been found in the shape file
 
 #### inoculation #####
@@ -93,6 +108,7 @@ custom_theme <-
         legend.position = "top",
         legend.justification = "left",
         legend.text = element_text(size = 12),
-        legend.title = element_text(size = 12)) 
+        legend.title = element_text(size = 12),
+        strip.background = element_rect(fill = NA, color = "black")) 
 
 colors_region <- ggsci::pal_lancet()(6)

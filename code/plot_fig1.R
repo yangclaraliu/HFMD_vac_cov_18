@@ -1,92 +1,67 @@
-pop |> 
-  data.table() |> 
-  dplyr::filter(age_group %in% paste0(0:4,"-"),
-                year == 2018) |> 
-  group_by(CNTY_CODE) |> 
-  summarise(under5 = sum(tot)) |> 
-  left_join(pop |> 
-              data.table() |> 
-              dplyr::filter(year == 2018) |> 
-              group_by(CNTY_CODE) |> 
-              summarise(tot = sum(tot)),
-            by = "CNTY_CODE"
-  ) |> 
-  mutate(p_under5 = under5/tot,
-         prv = substr(CNTY_CODE,1,2)) |> 
-  left_join(prv_list, by = "prv") |> 
-  left_join(labels_region, by = "region") |> 
-  group_by(region_label) |> 
-  filter(!is.na(p_under5) & !is.na(region)) |> 
-  ungroup() |> 
-  mutate(country_pop = sum(tot),
-         country_under5 = sum(under5),
-         p_under5_national = country_under5/country_pop) -> risky_pop
-
-pop |> 
-  data.table() |> 
-  dplyr::filter(year == 2018) |> 
-  group_by(CNTY_CODE) |> 
-  summarise(tot = sum(tot))|> 
-  mutate(prv = substr(CNTY_CODE, 1, 2)) |> 
-  left_join(prv_list, by = "prv") |> 
-  left_join(labels_region, by = "region") |> 
-  mutate(data_presence = CNTY_CODE %in% data$CNTY_CODE) |> 
-  group_by(region_label, data_presence) |> 
-  summarise(tot = sum(tot)) |> 
-  filter(!is.na(region_label)) |> 
-  group_by(region_label) |> 
-  mutate(all = sum(tot)) |> 
-  filter(data_presence == T) |> 
-  mutate(p_presence = tot/all) -> data_covered_pop
-
-
-data[,c("CNTY_CODE", "d2_2018")] |> 
-  right_join(shape, by = "CNTY_CODE") |> 
-  filter(prv %in% prv_list$prv) |> 
-  left_join(prv_list, by = "prv") |> 
-  left_join(labels_region, by = "region") |> 
-  filter(lvl == "cty") |> 
-  mutate(data_presence = !is.na(d2_2018),
-         location_presence = TRUE) |> 
-  group_by(region_label) |> 
-  summarise(data_presence = sum(data_presence),
-            location_presence = sum(location_presence)) -> data_covered_county
+pop_all %>% group_by(CNTY_CODE, code_prv, year) %>% summarise(pop = sum(pop)) %>% 
+  group_by(year) %>% group_split() %>% 
+  map(right_join, shape_cty %>% 
+        data.table() %>% 
+        dplyr::select(CNTY_CODE, code_prv),
+      by = c("CNTY_CODE", "code_prv")) %>% 
+  map(left_join, tab %>% 
+        dplyr::select(CNTY_CODE, code_prv, year, d2) %>% 
+        mutate(year = as.character(year)),
+      by = c("CNTY_CODE", "code_prv", "year")) %>% 
+  map(mutate, data_absent = is.na(d2)) %>%
+  map(mutate, label_region = substr(CNTY_CODE, 1, 1)) %>% 
+  map(group_by, label_region, data_absent) %>% 
+  map(summarise, pop = sum(pop, na.rm = T), county_counts = n()) %>% 
+  map(group_by, label_region) %>% 
+  map(mutate, pop_tot = sum(pop), county_tot = sum(county_counts),
+      pop_cov = pop/pop_tot, county_cov = county_counts/county_tot) %>% 
+  bind_rows(.id = "year") %>% 
+  mutate(year = as.numeric(year) + 2015) -> data_coverage
   
-data[,c("CNTY_CODE", "d2_2018")] |> 
-  mutate(prv = substr(CNTY_CODE, 1, 2)) |> 
-  dplyr::select(prv) |> distinct() |> mutate(prv_presence = T) |> 
-  right_join(shape, by = "prv") |>
-  filter(lvl == "prv", prv %in% prv_list$prv) |>  
-  right_join(prv_list, by = "prv") |> mutate(prv_presence = if_else(is.na(prv_presence), F, prv_presence)) |> 
-  left_join(labels_region, by = "region") |> 
-  group_by(region_label) |> 
-  summarise(data_presence = sum(prv_presence),
-            location_presence = n()) -> data_covered_province
+data_coverage %<>% 
+  mutate(before_2019 = if_else(year < 2019,
+                               "Before 2019",
+                               "2019"),
+         before_2019 = factor(before_2019,
+                              levels = c("Before 2019", "2019"))) %>% 
+  group_by(before_2019, data_absent, label_region) %>% 
+  summarise(county_counts = mean(county_counts),
+            county_tot = mean(county_tot))
 
-lm(p_under5 ~ region_label, data = risky_pop) |> summary()
+lm(p_risk ~ label_region, data = tab) |> summary()
 
-risky_pop %>%
-  ggplot(., aes(group = region_label, y = p_under5, color = region_label, x = region_label)) +
+tab %>% 
+  dplyr::select(CNTY_CODE, code_prv, year, d2) %>% 
+  mutate(year = as.character(year),
+         label_region = substr(CNTY_CODE, 1, 1)) %>% 
+  dplyr::filter(label_region == 2,
+                year == 2016) 
+
+APC %>%
+  ggplot(., aes(group = label_region, y = p_risk, color = label_region, x = label_region)) +
   geom_boxplot() +
   scale_color_manual(values = colors_region) +
-  geom_hline(aes(yintercept = p_under5_national), linetype = 2, size = 1) +
+  geom_hline(aes(yintercept = mean(p_risk_national)), linetype = 2, size = 1.5, color = "black") +
   custom_theme +
   theme(legend.position = "none") +
   labs(x = "Region",
        y = "Proportion of population\nunder 5 years of age") -> p1
 
-data_covered_county |> mutate(p_covered_county = data_presence /location_presence) |> 
-  ggplot(aes(x = region_label)) +
-  geom_bar(aes(y = location_presence, color = region_label), fill = NA,stat = "identity") +
-  geom_bar(aes(y = data_presence, color = region_label, fill = region_label), stat = "identity") +
+data_coverage %>% 
+  dplyr::select(before_2019, label_region, data_absent, county_counts, county_tot) %>% 
+  dplyr::filter(data_absent == F) %>% 
+  ggplot(aes(x = label_region)) +
+  geom_bar(aes(y = county_tot, color = label_region), fill = NA,stat = "identity") +
+  geom_bar(aes(y = county_counts, color = label_region, fill = label_region), stat = "identity") +
   scale_color_manual(values = colors_region) +
   scale_fill_manual(values = colors_region) +
   custom_theme +
   theme(legend.position = "none") +
   labs(x = "Region",
-       y = "Total number of counties\nand counties with available data") -> p2
+       y = "Total number of counties\nand counties with available data") +
+  facet_wrap(~before_2019) 
 
-(get_legend(p2 + 
+ß(get_legend(p2 + 
               theme(legend.position = "top",
                     legend.text = element_text(size = 16)) + 
               labs(color = "", fill = "") + 
