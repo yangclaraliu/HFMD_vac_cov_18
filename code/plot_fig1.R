@@ -38,6 +38,9 @@ tab %>%
                 year == 2016) 
 
 APC %>%
+  mutate(label_region = factor(label_region,
+                               levels = 1:6,
+                               labels = labels_region$names_region)) %>% 
   ggplot(., aes(group = label_region, y = p_risk, color = label_region, x = label_region)) +
   geom_boxplot() +
   scale_color_manual(values = colors_region) +
@@ -50,25 +53,32 @@ APC %>%
 data_coverage %>% 
   dplyr::select(before_2019, label_region, data_absent, county_counts, county_tot) %>% 
   dplyr::filter(data_absent == F) %>% 
+  mutate(label_region = factor(label_region,
+                               levels = 6:1,
+                               labels = rev(labels_region$names_region))) %>% 
   ggplot(aes(x = label_region)) +
   geom_bar(aes(y = county_tot, color = label_region), fill = NA,stat = "identity") +
   geom_bar(aes(y = county_counts, color = label_region, fill = label_region), stat = "identity") +
-  scale_color_manual(values = colors_region) +
-  scale_fill_manual(values = colors_region) +
+  scale_color_manual(values = rev(colors_region)) +
+  scale_fill_manual(values = rev(colors_region)) +
   custom_theme +
   theme(legend.position = "none") +
   labs(x = "Region",
        y = "Total number of counties\nand counties with available data") +
-  facet_wrap(~before_2019) 
+  facet_wrap(~before_2019) +
+  coord_flip() -> p2
 
-ß(get_legend(p2 + 
+(get_legend(p1 + 
               theme(legend.position = "top",
                     legend.text = element_text(size = 16)) + 
               labs(color = "", fill = "") + 
               guides(color=guide_legend(nrow=1,byrow=T)))) -> p_legend
 
-plot_grid(p_legend, plot_grid(p1 + theme(axis.text.x = element_text(angle = 90)), 
-                              p2 + theme(axis.text.x = element_text(angle = 90)), 
-                              ncol = 2), rel_heights = c(1,10), ncol = 1) -> p_save
+plot_grid(p_legend, plot_grid(p1, 
+                              p2, 
+                              nrow = 2,
+                              align = "hv",
+                              axis = "l"), rel_heights = c(1,10), ncol = 1) -> p_save
 
-ggsave("figs/fig1.png", p_save, width = 10, height = 7)
+ggsave("figs/fig1_v2.png", p_save, width = 10, height = 12)
+
