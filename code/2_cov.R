@@ -5,6 +5,8 @@ EV71_Lit <- readRDS("data/EV71_Lit.rds") %>%
   group_by(index) %>% 
   group_split()
 
+to_remove <- read_rds(paste0(path_dropbox_github, "to_remove.rds"))
+
 tab %>% 
   left_join(pop_all %>%
               dplyr::filter(ag_LL < 6) %>% 
@@ -31,45 +33,44 @@ tab %>%
   bind_rows() %>% 
   mutate(cov = d2_r_cs_adjusted/ pop) -> tmp
 
-tmp %>% 
-  dplyr::filter(cov > 1) %>% 
-  pull(CNTY_CODE) %>% 
-  unique() -> to_remove_CNTY_CODE
+# tmp %>% 
+#   dplyr::filter(cov > 1) %>% 
+#   pull(CNTY_CODE) %>% 
+#   unique() -> to_remove_CNTY_CODE
+# 
+# tmp %>% 
+#   dplyr::filter(cov > 1) %>% 
+#   pull(code_prv) %>% 
+#   unique() -> to_remove_prv
 
 tmp %>% 
-  dplyr::filter(cov > 1) %>% 
-  pull(code_prv) %>% 
-  unique() -> to_remove_prv
-
-tmp %>% 
-  dplyr::filter(!CNTY_CODE %in% to_remove,
+  dplyr::filter(#!CNTY_CODE %in% to_remove,
                 birth_cohort %in% c(2011:2016),
                 year == 2016) %>% 
   group_by(CNTY_CODE) %>% 
   mutate(cov_weighted = sum(cov*pop_r)) -> cov_2016
 
 tmp %>% 
-  dplyr::filter(!CNTY_CODE %in% to_remove,
+  dplyr::filter(#!CNTY_CODE %in% to_remove,
                 birth_cohort %in% c(2012:2017),
                 year == 2017) %>% 
   group_by(CNTY_CODE) %>% 
   mutate(cov_weighted = sum(cov*pop_r)) -> cov_2017
 
 tmp %>% 
-  dplyr::filter(!CNTY_CODE %in% to_remove,
+  dplyr::filter(#!CNTY_CODE %in% to_remove,
                 birth_cohort %in% c(2013:2018),
                 year == 2018) %>% 
   group_by(CNTY_CODE) %>% 
   mutate(cov_weighted = sum(cov*pop_r)) -> cov_2018
 
 tmp %>% 
-  dplyr::filter(!CNTY_CODE %in% to_remove,
+  dplyr::filter(#!CNTY_CODE %in% to_remove,
                 birth_cohort %in% c(2014:2019),
                 year == 2019) %>% 
   group_by(CNTY_CODE) %>% 
   group_by(CNTY_CODE) %>% 
   mutate(cov_weighted = sum(cov*pop_r)) -> cov_2019
-
 
 cov <- list(cov_2016, cov_2017, cov_2018, cov_2019)
 
@@ -86,8 +87,6 @@ cov %>%
       cov_weighted_min_prv = min(cov_weighted)) %>% 
   map(dplyr::select, CNTY_CODE, code_prv, code_prf, year, starts_with("cov_weighted")) %>% 
   map(distinct) %>% bind_rows() -> cov_baseline
-
-source("code/plot_fig2.R")
 
 #### importing HE ####
 pop_all %>%
@@ -135,45 +134,44 @@ tab %>%
   bind_rows() %>% 
   mutate(cov = d2_r_cs_adjusted/ pop) -> tmp
 
-tmp %>% 
-  dplyr::filter(cov > 1) %>% 
-  pull(CNTY_CODE) %>% 
-  unique() -> to_remove_CNTY_CODE
+# tmp %>% 
+#   dplyr::filter(cov > 1) %>% 
+#   pull(CNTY_CODE) %>% 
+#   unique() -> to_remove_CNTY_CODE
+# 
+# tmp %>% 
+#   dplyr::filter(cov > 1) %>% 
+#   pull(code_prv) %>% 
+#   unique() -> to_remove_prv
 
 tmp %>% 
-  dplyr::filter(cov > 1) %>% 
-  pull(code_prv) %>% 
-  unique() -> to_remove_prv
-
-tmp %>% 
-  dplyr::filter(!CNTY_CODE %in% to_remove,
+  dplyr::filter(#!CNTY_CODE %in% to_remove,
                 birth_cohort %in% c(2011:2016),
                 year == 2016) %>% 
   group_by(CNTY_CODE) %>% 
   mutate(cov_weighted = sum(cov*weights)) -> cov_2016
 
 tmp %>% 
-  dplyr::filter(!CNTY_CODE %in% to_remove,
+  dplyr::filter(#!CNTY_CODE %in% to_remove,
                 birth_cohort %in% c(2012:2017),
                 year == 2017) %>% 
   group_by(CNTY_CODE) %>% 
   mutate(cov_weighted = sum(cov*weights)) -> cov_2017
 
 tmp %>% 
-  dplyr::filter(!CNTY_CODE %in% to_remove,
+  dplyr::filter(#!CNTY_CODE %in% to_remove,
                 birth_cohort %in% c(2013:2018),
                 year == 2018) %>% 
   group_by(CNTY_CODE) %>% 
   mutate(cov_weighted = sum(cov*weights)) -> cov_2018
 
 tmp %>% 
-  dplyr::filter(!CNTY_CODE %in% to_remove,
+  dplyr::filter(#!CNTY_CODE %in% to_remove,
                 birth_cohort %in% c(2014:2019),
                 year == 2019) %>% 
   group_by(CNTY_CODE) %>% 
   group_by(CNTY_CODE) %>% 
   mutate(cov_weighted = sum(cov*weights)) -> cov_2019
-
 
 cov <- list(cov_2016, cov_2017, cov_2018, cov_2019)
 
@@ -248,34 +246,33 @@ tmp %>%
   unique() -> to_remove_prv
 
 tmp %>% 
-  dplyr::filter(!CNTY_CODE %in% to_remove,
+  dplyr::filter(#!CNTY_CODE %in% to_remove,
                 birth_cohort %in% c(2011:2016),
                 year == 2016) %>% 
   group_by(CNTY_CODE) %>% 
   mutate(cov_weighted = sum(cov*weights)) -> cov_2016
 
 tmp %>% 
-  dplyr::filter(!CNTY_CODE %in% to_remove,
+  dplyr::filter(#!CNTY_CODE %in% to_remove,
                 birth_cohort %in% c(2012:2017),
                 year == 2017) %>% 
   group_by(CNTY_CODE) %>% 
   mutate(cov_weighted = sum(cov*weights)) -> cov_2017
 
 tmp %>% 
-  dplyr::filter(!CNTY_CODE %in% to_remove,
+  dplyr::filter(#!CNTY_CODE %in% to_remove,
                 birth_cohort %in% c(2013:2018),
                 year == 2018) %>% 
   group_by(CNTY_CODE) %>% 
   mutate(cov_weighted = sum(cov*weights)) -> cov_2018
 
 tmp %>% 
-  dplyr::filter(!CNTY_CODE %in% to_remove,
+  dplyr::filter(#!CNTY_CODE %in% to_remove,
                 birth_cohort %in% c(2014:2019),
                 year == 2019) %>% 
   group_by(CNTY_CODE) %>% 
   group_by(CNTY_CODE) %>% 
   mutate(cov_weighted = sum(cov*weights)) -> cov_2019
-
 
 cov <- list(cov_2016, cov_2017, cov_2018, cov_2019)
 
@@ -293,6 +290,10 @@ cov %>%
   map(dplyr::select, CNTY_CODE, code_prv, code_prf, year, starts_with("cov_weighted")) %>% 
   map(distinct) %>% bind_rows() -> cov_WU
 
+cov <- list(cov_baseline, cov_HE, cov_WU)
+names(cov) <- c("baseline", "HE", "WU")
+write_rds(cov, paste0(path_dropbox_github, "coverage_results_20240305.rds"))
+
 #### sanity check ####
 # cov_WU %>% 
 #   mutate(scenario = "Wu et al.") %>% 
@@ -305,5 +306,31 @@ cov %>%
 #   geom_point() +
 #   geom_line() +
 #   facet_wrap(~CNTY_CODE)
+tab %>% 
+  left_join(pop_all %>%
+              dplyr::filter(ag_LL < 6) %>% 
+              mutate(ag_LL = ag_LL,
+                     year = as.numeric(year)),
+            by = c("CNTY_CODE", "code_prv", "year")) %>%
+  group_by(CNTY_CODE, year) %>% 
+  mutate(APC = sum(pop),
+         pop_r = pop/APC,
+         d2_r = d2*pop_r,
+         birth_cohort = year-ag_LL) %>% 
+  dplyr::select(CNTY_CODE, year, ag_LL, pop_r) %>% 
+  left_join(distribution_weights_HE, by = "ag_LL") %>% 
+  dplyr::select(-author) %>% 
+  rename(weights_HE = weights) %>% 
+  left_join(distribution_weights_WU, by = "ag_LL") %>% 
+  dplyr::select(-author) %>% 
+  rename(weights_WU = weights) %>% 
+  dplyr::filter(year == 2017) %>% 
+  mutate(ag_LL = factor(ag_LL)) -> weights_save
 
+write_rds(weights_save, paste0(path_dropbox_github, "weights_compare_20240305.rds"))
+
+# pivot_longer(cols = c("pop_r", "weights_HE", "weights_WU")) %>% 
+#   ggplot(., aes(x = ag_LL, y = value, group = interaction(CNTY_CODE, name), color = name)) +
+#   geom_line() +
+#   geom_point()
 

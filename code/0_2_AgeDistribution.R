@@ -9,3 +9,6 @@ lit %>%
 
 data %>% 
   filter(CNTY_CODE == "510723")
+
+unique(lit$第一作者)
+lit %>% dplyr::filter("第一作者" == "何小君")

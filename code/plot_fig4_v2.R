@@ -1,4 +1,62 @@
-# EV71_Lit <- readRDS("data/EV71_Lit.rds") %>%
+
+cov <- read_rds(paste0(path_dropbox_github, "coverage_results_20240305.rds")) %>% 
+  bind_rows(.id = "scenario")
+weights <- read_rds(paste0(path_dropbox_github, "weights_compare_20240305.rds")) 
+
+weights %>% 
+  pivot_longer(cols = starts_with("weights")) %>% 
+  mutate(name = factor(name,
+                       levels = c("weights_HE",
+                                  "weights_WU",
+                                  "hi"),
+                       labels = c("He et al.",
+                                  "Wu et al.",
+                                  "Population age distribution\nby country"))) %>% 
+  ggplot(.) +
+  geom_line(aes(x = ag_LL, y = pop_r, group = CNTY_CODE), alpha = 0.01) +
+  geom_point(aes(x = ag_LL, y = pop_r, group = CNTY_CODE), alpha = 0.01) +
+  geom_line(aes(x = ag_LL, y = value, group = name, color = name), size = 1.5) +
+  geom_point(aes(x = ag_LL, y = value, group = name, color = name), size = 3) +
+  scale_color_manual(values = c("#c51b8a", "#756bb1", "black"), drop = F) +
+  custom_theme + 
+  theme(legend.text = element_text(size = 16),
+        panel.border = element_rect(colour = "black", fill=NA),
+        strip.background = element_rect(colour = "black", fill = NA)) +
+  labs(y = "% of vaccines distributed\nto a specific age group",
+       x = "Age",
+       color = "") + 
+  guides(color=guide_legend(nrow=1,byrow=T)) -> p1
+  
+cov %>%
+  dplyr::select(CNTY_CODE, year, cov_weighted, scenario) %>% 
+  pivot_wider(names_from = scenario, values_from = cov_weighted) %>% 
+  pivot_longer(cols = c("HE","WU"))  %>% 
+  mutate(name = factor(name,
+                       levels = c("HE",
+                                  "WU"),
+                       labels = c("He et al.",
+                                  "Wu et al."))) %>% 
+  ggplot(., aes(x = baseline, y = value, color = name)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(slope = 1, intercept = 0) +
+  scale_color_manual(values = c("#c51b8a", "#756bb1")) +
+  custom_theme + 
+  theme(legend.text = element_text(size = 16),
+        panel.border = element_rect(colour = "black", fill=NA),
+        strip.background = element_rect(colour = "black", fill = NA)) +
+  labs(y = "Estimates with alternative assumptions",
+       x = "Baseline estimate \n(based on population age distribution)",
+       color = "") + 
+  guides(colour = guide_legend(override.aes = list(alpha = 1, size = 3),
+                               nrow=1,
+                               byrow=T)) -> p2
+
+
+plot_grid(p1, p2, ncol = 1, align = "v", axis = "lr") -> p_save
+
+ggsave("figs/fig4_v2.png", p_save, width = 7, height = 13)
+
+ # EV71_Lit <- readRDS("data/EV71_Lit.rds") %>%
 #   filter(!(Age_LL_value == 0 & Age_UL_value %in% c(5,6)))
 
 # EV71_Lit %>% 

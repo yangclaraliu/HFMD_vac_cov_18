@@ -41,6 +41,7 @@ APC %>%
   mutate(label_region = factor(label_region,
                                levels = 1:6,
                                labels = labels_region$names_region)) %>% 
+  dplyr::filter(year == 2019) %>% 
   ggplot(., aes(group = label_region, y = p_risk, color = label_region, x = label_region)) +
   geom_boxplot() +
   scale_color_manual(values = colors_region) +
@@ -70,15 +71,21 @@ data_coverage %>%
 
 (get_legend(p1 + 
               theme(legend.position = "top",
-                    legend.text = element_text(size = 16)) + 
+                    legend.text = element_text(size = 16),
+                    legend.justification = "center",
+                    legend.background = element_rect(fill = "white")) + 
               labs(color = "", fill = "") + 
               guides(color=guide_legend(nrow=1,byrow=T)))) -> p_legend
 
-plot_grid(p_legend, plot_grid(p1, 
-                              p2, 
-                              nrow = 2,
-                              align = "hv",
-                              axis = "l"), rel_heights = c(1,10), ncol = 1) -> p_save
+plot_grid(p_legend, 
+          plot_grid(p1, 
+                    p2, 
+                    nrow = 2,
+                    align = "hv",
+                    axis = "l"), 
+          rel_heights = c(1,10), 
+          ncol = 1) +
+  theme(plot.background = element_rect(fill = "white")) -> p_save
 
 ggsave("figs/fig1_v2.png", p_save, width = 10, height = 12)
 

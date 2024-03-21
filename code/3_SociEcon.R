@@ -1,10 +1,5 @@
 
 
-pt_imputed <- readRDS("~/GitHub/vac2_cov_review/data/pt_imputed.rds") %>% 
-  filter(lvl == "cty") %>% 
-  dplyr::select(CNTY_CODE, edu, GDPpc, urban_prop, temp) %>% 
-  .[complete.cases(.),]
-
 tmp %>% 
   filter(pop_source == "YB", age_structure_source == "YB", process == "lm",
          year == 2018, !(CNTY_CODE %in% to_remove), metric == "LL") %>% 

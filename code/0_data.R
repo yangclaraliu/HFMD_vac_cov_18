@@ -15,8 +15,6 @@ prefectures <- paste0(path_dropbox,"Different Versions of Administrative Boundar
 counties <- paste0(path_dropbox,"Different Versions of Administrative Boundary/CCDC2022/quxian.shp") %>% sf::read_sf()
 provinces <-  paste0(path_dropbox,"Different Versions of Administrative Boundary/CCDC2022/sheng.shp") %>% sf::read_sf()
 
-provinces
-
 provinces %>% 
   mutate(code_prv = substr(ZONECODE,1,2)) %>% 
   dplyr::filter(!code_prv %in% c(71, 81, 82)) %>% 
@@ -28,12 +26,14 @@ provinces %>%
   rename(NAME_EN = seg1) %>% 
   mutate(region = factor(region,
                          levels = 1:6,
-                         labels = c("Huabei\n(North)",
-                                    "Dongbei\n(Northeast)",
-                                    "Huadong\n(East)",
-                                    "Zhongnan\n(South)",
-                                    "Xinan\n(Southwest)",
-                                    "Xibei\n(Northwest)"))) -> shape_prv
+                         labels = c("Huabei\n(~North)",
+                                    "Dongbei\n(~Northeast)",
+                                    "Huadong\n(~East)",
+                                    "Zhongnan\n(~South)",
+                                    "Xinan\n(~Southwest)",
+                                    "Xibei\n(~Northwest)")),
+         NAME_EN = if_else(code_prv == "61", "Shaanxi", NAME_EN)) %>% 
+  arrange(code_prv) -> shape_prv
 
 counties %>% 
   dplyr::select(NAME, PYNAME, CNTY_CODE) %>% 
@@ -47,12 +47,12 @@ target_province <- read_rds(paste0(path_dropbox_github, "prv_data_exist.rds"))
 
 labels_region <- data.frame(labels_region = 1:6,
                             names_region = c(
-                              "Huabei\n(North)",
-                              "Dongbei\n(Northeast)",
-                              "Huadong\n(East)",
-                              "Zhongnan\n(South)",
-                              "Xinan\n(Southwest)",
-                              "Xibei\n(Northwest)"
+                              "Huabei\n(~North)",
+                              "Dongbei\n(~Northeast)",
+                              "Huadong\n(~East)",
+                              "Zhongnan\n(~South)",
+                              "Xinan\n(~Southwest)",
+                              "Xibei\n(~Northwest)"
                             ))
 
 
@@ -64,7 +64,7 @@ pop_all <- read_rds(paste0(path_dropbox_github, "pop_tar.rds")) %>%
                values_to = "pop")
 
 APC <- pop_all %>% 
-  dplyr::filter(ag_LL < 5) %>% 
+  dplyr::filter(ag_LL <= 5) %>% 
   group_by(CNTY_CODE, code_prv, year) %>% 
   summarise(APC = sum(pop)) %>% 
   mutate(year = as.numeric(year))
@@ -119,3 +119,12 @@ custom_theme <-
         strip.background = element_rect(fill = NA, color = "black")) 
 
 colors_region <- ggsci::pal_lancet()(6)
+cov <- read_rds(paste0(path_dropbox_github, "coverage_results_20240305.rds"))
+source("code/plot_fig1.R")
+source("code/plot_fig2_pop.R")
+
+pt_imputed <- readRDS("/Users/yangliu/Library/CloudStorage/Dropbox/Github_Data/vac2_cov_review/pt_imputed.rds") %>% 
+  filter(lvl == "cty") %>% 
+  dplyr::select(CNTY_CODE, edu, GDPpc, urban_prop, temp) %>% 
+  .[complete.cases(.),]
+

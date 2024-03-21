@@ -5,8 +5,16 @@ pop %<>%
   mutate(CNTY_CODE = substr(CNTY_CODE, 1, 6),
          age_group = gsub("-","",age_group),
          ag_LL = parse_number(age_group)) %>% 
-  dplyr::select(-lvl, -lvl_name, -pop_male, -pop_female) %>% 
-  dplyr::filter(year > 2015 & year < 2018) 
+  dplyr::select(-lvl, -lvl_name, -pop_male, -pop_female) #%>% 
+#  dplyr::filter(year > 2015 & year < 2018) 
+
+# pop %<>% 
+#   mutate(CNTY_CODE = substr(CNTY_CODE, 1, 6),
+#          age_group = gsub("-","",age_group),
+#          ag_LL = parse_number(age_group)) %>% 
+#   dplyr::select(-lvl, -lvl_name, -pop_male, -pop_female) %>% 
+#   dplyr::filter(year > 2015 & year < 2018) 
+
 
 pop_2018 <- read_excel(paste0(path_dropbox, "[Data] HFMD/20230802_2018_pop.xlsx"),
                        col_types = "text") %>% 
@@ -177,4 +185,7 @@ pop_all %>%
 
 write_rds(to_save,
           file = paste0(path_dropbox_github, "pop_tar.rds"))
+
+write_rds(to_remove,
+          file = paste0(path_dropbox_github, "to_remove.rds"))
 
