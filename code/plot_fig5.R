@@ -2,7 +2,7 @@ require(gamlss)
 require(car)
 
 pop_all %>% 
-  dplyr::filter(ag_LL < 5) %>% 
+  dplyr::filter(ag_LL <= 5) %>% 
   group_by(CNTY_CODE, code_prv, year) %>% 
   summarise(APC = sum(pop)) %>% 
   left_join(pop_all %>% 
@@ -23,236 +23,340 @@ cov %>%
                      urban_s = (urban_prop-mean(urban_prop))/sd(urban_prop),
                      temp_s = (temp-mean(temp))/sd(temp)), 
             by = "CNTY_CODE") %>% 
-  dplyr::filter(year == 2019) %>% 
+  left_join(epi %>% 
+              dplyr::select(CNTY_CODE, burden, burden_s),
+            by = "CNTY_CODE") %>% 
+  dplyr::filter(year == 2018) %>% 
   left_join(pop_risk,
             by = c("CNTY_CODE", "code_prv", "year")) %>% 
   .[complete.cases(.),] %>% 
   mutate(region = substr(CNTY_CODE, 1, 1)) %>% 
-  dplyr::filter(!code_prv %in% 52) -> reg_tab
-
-scientific_10 <- function(x) {
-  parse(text=gsub("e", " %*% 10^", scales::scientific_format()(x)))
-}
+  dplyr::filter(!code_prv %in% 52,
+                coverage_weighted_pop <= 1,
+                coverage_weighted_HE <= 1,
+                coverage_weighted_WU <= 1) -> reg_tab
 
 # model <- gamlss(cov_weighted ~ edu + GDPpc + urban_prop + p_risk + temp + tot + code_prv,
 #                 family = BEZI,
 #                 data = reg_tab %>% dplyr::filter(scenario == "baseline"),
 #                 trace = T) 
 
-reg_tab %>% 
-  group_by(scenario) %>% 
-  group_split() %>% 
-  setNames(c("HE", "WU", "baseline")) %>% 
-  map(~gamlss(formula = cov_weighted ~ GDPpc_s + urban_s + code_prv + p_risk_s + tot_s + temp_s + edu_s,
-              family = ZALG,
-              data = .,
-              trace = T)) -> models
+#### check correlations ####
+library(corrplot)
+library(RColorBrewer)
+M <- cor(reg_tab[,c("edu_s", "GDPpc_s", "urban_s", "temp_s", "burden_s", "p_risk_s", "tot_s")])
+corrplot(M, type="upper", order="hclust",
+         col=brewer.pal(n=8, name="RdYlBu"))
 
-reg_tab %>% 
-  dplyr::filter(cov_weighted <= 1) %>% 
-  group_by(scenario) %>%  
-  group_split() %>% 
-  setNames(c("HE", "WU", "baseline")) %>% 
-  map(~gamlss(formula = cov_weighted ~ GDPpc_s + urban_s + code_prv + p_risk_s + tot_s + temp_s + edu_s,
-              family = BEZI,
-              data = .,
-              trace = T)) -> models_filtered
+M <- cor(reg_tab[,c("edu", "GDPpc", "urban_prop", "temp", "burden", "p_risk", "tot", "code_prv")])
+corrplot(M, type="upper", order="hclust",
+         col=brewer.pal(n=8, name="RdYlBu"))
 
-reg_tab %>% 
-  dplyr::filter(cov_weighted <= 1) %>% 
-  group_by(scenario) %>% 
-  group_split() %>% map(dplyr::filter) %>% 
-  setNames(c("HE", "WU", "baseline")) %>% 
-  map(~gamlss(formula = cov_weighted ~ GDPpc_s + urban_s + p_risk_s + tot_s + temp_s + edu_s,
-              family = BEZI,
-              data = .,
-              trace = T)) -> models_filtered_no_prov
+chisq.test(x = reg_tab$code_prv,
+           y = reg_tab$edu)
 
-reg_tab %>% 
-  group_by(scenario) %>% 
-  group_split() %>% 
-  setNames(c("HE", "WU", "baseline")) %>% 
-  map(~glm(formula = cov_weighted ~ GDPpc_s + urban_s 
-           + p_risk_s + tot_s + temp_s + edu_s,
-           data = .)) -> models_glm
+summary(lm(p_risk ~ code_prv, data = reg_tab))
 
-vif(models_glm[[1]])
-summary(models_glm[[1]])
+#### check vif ####
+model_s <- lm(coverage_weighted_pop ~ edu_s + GDPpc_s + urban_s + 
+                temp_s + 
+                burden_s + p_risk_s + tot_s + code_prv,
+              data = reg_tab)
+model <- lm(coverage_weighted_pop ~ edu + GDPpc + urban_prop + temp + 
+                burden + p_risk + tot + code_prv,
+              data = reg_tab)
+
+print(car::vif(model_s))
+print(car::vif(model))
+
+#### full model
+models <- list()
+# s = standardised; ns = non-standardised
+
+models[["pop_full_s"]] <- gamlss(formula = coverage_weighted_pop ~ p_risk_s + tot_s + temp_s + edu_s + burden_s + urban_s + GDPpc_s + code_prv,
+                                            family = BEZI,
+                                            data = reg_tab,
+                                            trace = T)
+models[["pop_full_ns"]] <- gamlss(formula = coverage_weighted_pop ~ p_risk + tot + temp + edu + burden + urban_prop + GDPpc + code_prv,
+                                 family = BEZI,
+                                 data = reg_tab,
+                                 trace = T)
+
+#### test what difference would it make if we just revert to using GLM
+models[["pop_full_s_glm"]] <- glm(formula = coverage_weighted_pop ~ p_risk_s + tot_s + temp_s + edu_s + burden_s + urban_s + GDPpc_s + code_prv,
+                              data = reg_tab)
+
+#### remove urban prop due to multicollinarity ####
+models[["pop_s_MC"]] <- gamlss(formula = coverage_weighted_pop ~ p_risk_s + tot_s + temp_s + edu_s + burden_s + GDPpc_s + code_prv,
+                                 family = BEZI,
+                                 data = reg_tab,
+                                 trace = T)
+models[["pop_ns_MC"]] <- gamlss(formula = coverage_weighted_pop ~ p_risk + tot + temp + edu + burden + GDPpc + code_prv,
+                                  family = BEZI,
+                                  data = reg_tab,
+                                  trace = T)
+
+LR.test(models$pop_s_MC, models$pop_full_s)
+
+#### test if province specific intercept should be included ####
+models[["pop_s_noPrv"]] <- gamlss(formula = coverage_weighted_pop ~ p_risk_s + tot_s + temp_s + edu_s + burden_s + GDPpc_s + urban_s,
+                                  family = BEZI,
+                                  data = reg_tab,
+                                  trace = T)
+LR.test(models$pop_s_noPrv, models$pop_full_s)
+
+# seems like after changing the age group definition we should indeed include province specific intercept
+
+#### univariate model #### 
+##### (1) #####
+models[["pop_univariate_s_p_risk"]] <- gamlss(formula = coverage_weighted_pop ~ p_risk_s,
+                                 family = BEZI,
+                                 data = reg_tab,
+                                 trace = T)
+
+##### (2) #####
+models[["pop_univariate_s_tot"]] <- gamlss(formula = coverage_weighted_pop ~ tot_s,
+                                              family = BEZI,
+                                              data = reg_tab,
+                                              trace = T)
 
 
-models_filtered_no_prov %>% 
-  map(summary) -> model_summary
+##### (3) #####
+models[["pop_univariate_s_temp"]] <- gamlss(formula = coverage_weighted_pop ~ temp_s,
+                                              
+                                              family = BEZI,
+                                              data = reg_tab,
+                                              trace = T)
 
-# 
-# reg_tab %>% 
-#   group_by(scenario) %>% 
-#   group_split() %>% map(dplyr::filter, cov_weighted < 1) %>% 
-#   setNames(c("HE", "WU", "baseline")) %>% 
-#   map(~gamlss(formula = cov_weighted ~ GDPpc_s + urban_s + code_prv + p_risk_s + tot_s + temp_s + edu_s,
-#       family = BEZI,
-#       data = .,
-#       trace = T)) -> models
-# 
-# reg_tab %>% 
-#   group_by(scenario) %>% 
-#   group_split() %>% map(dplyr::filter, cov_weighted < 1) %>% 
-#   setNames(c("HE", "WU", "baseline")) %>% 
-#   map(~gamlss(formula = cov_weighted ~ GDPpc_s + urban_s +  p_risk_s + tot_s + temp_s + edu_s,
-#               family = GA,
-#               data = .,
-#               trace = T)) -> models_no_prv
+##### (4) #####
+models[["pop_univariate_s_edu"]] <- gamlss(formula = coverage_weighted_pop ~ edu_s,
+                                              
+                                              family = BEZI,
+                                              data = reg_tab,
+                                              trace = T)
 
-# model_s <- gamlss(cov_weighted ~ GDPpc_s + urban_s + code_prv + p_risk_s + tot_s + temp_s + edu_s,
-#                   family = BEZI,
-#                   data = reg_tab %>% dplyr::filter(scenario == "HE", cov_) ,
-#                   trace = T) 
+##### (5) #####
+models[["pop_univariate_s_burden"]] <- gamlss(formula = coverage_weighted_pop ~ burden_s,
+                                              
+                                              family = BEZI,
+                                              data = reg_tab,
+                                              trace = T)
 
-# model_s <- lm(cov_weighted ~ GDPpc_s + urban_s + edu_s + code_prv + p_risk_s + tot_s + temp_s,
-#               data = reg_tab %>% dplyr::filter(scenario == "baseline")) 
-# vif(model_s)
-# model_summary <- summary(model)
-# model_s_summary <- summary(model_s)
-# se <- sqrt(diag(vcov(model))) %>% tail(-3)
+##### (6) #####
+models[["pop_univariate_s_urban"]] <- gamlss(formula = coverage_weighted_pop ~ urban_s,
+                                             family = BEZI,
+                                             data = reg_tab,
+                                             trace = T)
 
-# coef(model) %>% 
-#   tail(-3) %>% 
-#   enframe %>% 
-#   mutate(prv_no = as.character(parse_number(name)),
-#          se = se,
-#          LL = value - 1.96*se,
-#          UL = value + 1.96*se,
-#   ) %>% 
-#   mutate(nt = ntile(value, 4)) %>% arrange(value) 
+##### (7) #####
+models[["pop_univariate_s_GDPpc"]] <- gamlss(formula = coverage_weighted_pop ~ GDPpc_s,
+                                              
+                                              family = BEZI,
+                                            data = reg_tab,
+                                              trace = T)
 
-# coef(model) %>% 
-  # tail(-3) %>% 
-  # enframe %>%
-# model_summary[[3]] %>% 
-#   .[,1:2] %>% 
-#   data.frame() |> 
-#   rownames_to_column() |> 
-#   filter(grepl("code_prv",rowname)) |> 
-#   mutate(code_prv = (parse_number(rowname)),
-#          LL = Estimate  - 1.96*`Std..Error`,
-#          UL = Estimate  + 1.96*`Std..Error`,
-#   ) %>% 
-#   add_row(Estimate  = 0, code_prv = 11, LL = 0, UL = 0) %>% 
-#   arrange(code_prv) %>% 
-#   left_join(shape_prv %>% mutate(code_prv = as.numeric(code_prv)), by = c("code_prv")) %>% 
-#   mutate(region = substr(code_prv, 1, 1)) %>% 
-#   filter(!is.na(code_prv)) %>% 
-#   left_join(labels_region %>% rename(region = labels_region) %>% mutate(region = as.character(region)), by = "region") |> 
-#   rename(value = Estimate) %>% 
-#   arrange(code_prv) -> p_table
+##### (8) #####
+models[["pop_univariate_s_prv"]] <- gamlss(formula = coverage_weighted_pop ~ code_prv,
+                                              family = BEZI,
+                                              data = reg_tab,
+                                              trace = T)
 
-# shape_prv |> 
-#   rename(names_region = region) %>% 
-#   left_join(labels_region, by = "names_region") %>% 
-#   group_by(labels_region) |> tally() |> pull(n) -> rep_times
-# 
-# rep(colors_region,
-#     times = rep_times) -> colors_label
-# 
-# p_table %>% 
-#   arrange(code_prv) %>% 
-#   mutate(names_region = factor(names_region,
-#                                levels = labels_region$names_region)) %>% 
-#   mutate(NAME_EN = factor(NAME_EN),
-#          code_prv = factor(code_prv,
-#                            levels = shape_prv$code_prv,
-#                            labels = shape_prv$NAME_EN)) %>% 
-#   ggplot(.,
-#          aes(x = code_prv, color = names_region)) +
-#   geom_rect(aes(xmin= c(1)-0.5,
-#                 xmax = c(5)+0.5,
-#                 ymin = -Inf,
-#                 ymax = Inf), 
-#             fill = "grey90", 
-#             alpha = 0.04,
-#             color = NA) +
-#   geom_rect(aes(xmin= c(9)-0.5,
-#                 xmax = c(15)+0.5,
-#                 ymin = -Inf,
-#                 ymax = Inf), fill = "grey90", alpha = 0.04, color = NA) +
-#   geom_rect(aes(xmin= c(22)-0.5,
-#                 xmax = c(26)+0.5,
-#                 ymin = -Inf,
-#                 ymax = Inf), fill = "grey90", alpha = 0.04, color = NA) +
-#   geom_point(aes(y = value), size = 2) +
-#   geom_segment(aes(xend = code_prv, y = LL, yend = UL)) +
-#   geom_hline(yintercept = 0, linetype = 2) +
-#   scale_x_discrete(drop = F,
-#                    guide = guide_axis(n.dodge = 3)) +
-#   custom_theme +
-#   theme(legend.position = "top",
-#         legend.text = element_text(size = 16)) + 
-#   guides(color=guide_legend(nrow=1,byrow=T)) +
-#   scale_color_manual(breaks = labels_region$names_region, values = colors_region) +
-#   labs(x = "", y = "Province Specific Intercepts", color = "") -> p_prv
+#### summary: univariate ####
+model_summary_univariate <- list("p_risk" = summary(models$pop_univariate_s_p_risk),
+                                 "tot" = summary(models$pop_univariate_s_tot),
+                                 "temp" = summary(models$pop_univariate_s_temp),
+                                 "edu" = summary(models$pop_univariate_s_edu),
+                                 "burden" = summary(models$pop_univariate_s_burden),
+                                 "urban" = summary(models$pop_univariate_s_urban),
+                                 "GDPpc" = summary(models$pop_univariate_s_GDPpc),
+                                 "prv" = summary(models$pop_univariate_s_prv))
 
-model_summary %>%
-  map(data.frame) %>% 
-  map(rownames_to_column) %>% 
+#### sensitivity analysis regression ####
+# given that the final model is the full model, we will run the same thing
+# through again but using the other datasets
+
+models[["HE_full_s"]] <- gamlss(formula = coverage_weighted_HE ~ p_risk_s + tot_s + temp_s + edu_s + burden_s + urban_s + GDPpc_s + code_prv,
+                                family = BEZI,
+                                data = reg_tab,
+                                trace = T)
+
+models[["WU_full_s"]] <- gamlss(formula = coverage_weighted_WU ~ p_risk_s + tot_s + temp_s + edu_s + burden_s + urban_s + GDPpc_s + code_prv,
+                                family = BEZI,
+                                data = reg_tab,
+                                trace = T)
+
+model_summary_SA <- list("pop" = summary(models$pop_full_s),
+                         "HE" = summary(models$HE_full_s),
+                         "WU" = summary(models$WU_full_s))
+
+model_summary_main <- list()
+model_summary_main[["pop"]] <- data.frame(effect = exp(coef(models$pop_full_s, what = "mu")))
+ci_tmp <- exp(confint(models$pop_full_s, what = "mu"))
+model_summary_main[["pop"]] <- cbind(model_summary_main[["pop"]], ci_tmp)
+
+model_summary_main[["HE"]] <- data.frame(effect = exp(coef(models$HE_full_s, what = "mu")))
+ci_tmp <- exp(confint(models$HE_full_s, what = "mu"))
+model_summary_main[["HE"]] <- cbind(model_summary_main[["HE"]], ci_tmp)
+
+model_summary_main[["WU"]] <- data.frame(effect = exp(coef(models$WU_full_s, what = "mu")))
+ci_tmp <- exp(confint(models$WU_full_s, what = "mu"))
+model_summary_main[["WU"]] <- cbind(model_summary_main[["WU"]], ci_tmp)
+
+model_summary_main %>%
   bind_rows(.id = "scenario") %>% 
-  filter(!grepl("code_prv",rowname)) |> 
-  mutate(LL = Estimate  - 1.96*`Std..Error`,
-         UL = Estimate  + 1.96*`Std..Error`,
-  ) %>%
+  rownames_to_column() %>% 
+  dplyr::filter(!grepl("code_prv",rowname)) %>%
   dplyr::filter(!grepl("Intercept", rowname)) %>% 
-  #.[2:7,] %>% 
-  dplyr::filter(scenario == "baseline") %>% 
-  ggplot(., aes(y = rowname, x = Estimate)) +
-  geom_point(size = 3) +
-  geom_segment(aes(y = rowname, yend = rowname,
-                   x = LL, xend = UL)) +
-  geom_vline(xintercept = 0, linetype = 2) +
+  dplyr::filter(scenario == "pop") %>% 
+  mutate(rowname = gsub(c("[0-9]"), "", rowname),
+         rowname = str_remove_all(rowname, "\\."),
+         rowname = factor(rowname,
+                          levels = c("p_risk_s",
+                                     "tot_s",
+                                     "temp_s",
+                                     "edu_s",
+                                     "burden_s",
+                                     "urban_s",
+                                     "GDPpc_s"),
+                          labels = c("Proportion of\npopulation under 5",
+                                     "Total population size",
+                                     "Average temperature",
+                                     "Average level\nof education",
+                                     "Historical bruden of HFMD",
+                                     "Proportion of population\nin urban setting",
+                                     "GDP per capita"
+                                     ))) %>% 
+         # scenario = factor(scenario,
+         #                   levels = c("pop", "HE", "WU"),
+         #                   labels = c("Population age distribution by county",
+         #                              "HE",
+         #                              "WU et al."))) %>% 
+  ggplot(., aes(y = rowname, x = effect)) +
+  geom_point(size = 3,
+             position = position_dodge(width = 0.3)) +
+  geom_linerange(aes(xmin = `2.5 %`, xmax = `97.5 %`),
+                position = position_dodge(width = 0.3)) +
+  geom_vline(xintercept = 1, 
+             linetype = 2) +
   custom_theme +
   theme(legend.position = "top",
         legend.text = element_text(size = 16)) +
-  labs(y = "Independent variables", 
-       x = "Estimated Effects", color = "") +
+  labs(y = "", 
+       x = "Estimated Effects\nRelative change in mean", color = "") -> p_effect
   # scale_color_manual(values = c("baseline" = "black", 
   #                               "WU" = "#c51b8a", 
-  #                               "HE" = "#756bb1")) 
-  scale_y_discrete(labels = c("Average level\nof education",
-                              "GDP per capita",
-                              "Proportion of\npopulation under 5",
-                              "Average temperature",
-                              "Total population size",
-                              "Proportion of population\nin urban setting")) -> p_effect
+  #                               "HE" = "#756bb1"))
 
 reg_tab %>% 
-  mutate(tier1 = code_prv %in% c(11, 12, 31, 50)) %>% 
-  dplyr::select(CNTY_CODE, code_prv, code_prf, year, cov_weighted, p_risk, p_risk_s, tier1) %>% 
-  ggplot(., aes(x = p_risk, y = cov_weighted)) +
-  geom_point(alpha = 0.5) +
-  geom_smooth(color = "#c51b8a",
-              fill = "#fa9fb5",
-              method = "loess") +
+  # mutate(tier1 = code_prv %in% c(11, 12, 31, 50)) %>% 
+  #dplyr::select(CNTY_CODE, code_prv, code_prf, year, cov_weighted, p_risk, p_risk_s, tier1) %>% 
+  ggplot(., aes(x = p_risk, y = coverage_weighted_pop)) +
+  #geom_point() +
+  stat_density_2d(aes(fill = ..level..), geom = "polygon", colour="grey") +
+  # stat_density_2d(aes(fill = ..density..), geom = "raster", contour = FALSE) +
+  scale_fill_distiller(palette="BuPu", direction=1) +
+  # scale_x_log10() +
+  # geom_point(alpha = 0.5) +
+  # geom_smooth(color = "#c51b8a",
+  #             fill = "#fa9fb5",
+  #             method = "lm") +
   custom_theme +
   theme(legend.position = "top",
-        legend.text = element_text(size = 16)) +
+        legend.text = element_text(size = 16),
+        legend.key.width = unit(2, "cm")) +
+  # geom_hline(yintercept = 0) +
   labs(y = "Vaccine coverage", 
-       x = "Proportion of population\nunder 5 years of age", color = "") +
-  geom_hline(yintercept = 0) -> p_under5
+       x = "Proportion of population\nunder 5 years of age", 
+       color = "",
+       fill = "Density") -> p_under5
 
-reg_tab %>% 
-  mutate(tier1 = code_prv %in% c(11, 12, 31, 50)) %>% 
-  # dplyr::select(CNTY_CODE, code_prv, code_prf, year, cov_weighted, p_risk, p_risk_s, tier1) %>% 
-  ggplot(., aes(x = temp, y = cov_weighted)) +
-  geom_point(alpha = 0.5) +
-  geom_smooth(color = "#c51b8a",
-              fill = "#fa9fb5",
-              method = "loess") +
+model_summary_main %>%
+  bind_rows(.id = "scenario") %>% 
+  rownames_to_column() %>% 
+  dplyr::filter(grepl("code_prv",rowname)) %>%
+  separate(rowname, into = c("seg1", "code_prv", "seg3")) %>% 
+  dplyr::select(-seg1, -seg3) %>% 
+  bind_rows(data.frame(code_prv = '11',
+                       scenario = "pop")) %>% 
+  replace(., is.na(.), 1) %>% 
+  # dplyr::filter(scenario == "pop") %>% 
+  mutate(code_prv = as.character(parse_number(code_prv)),
+         scenario = factor(scenario,
+                           levels = c("pop", "HE", "WU"),
+                           labels = c("Population age distribution by county",
+                                      "HE",
+                                      "WU et al."))) %>% 
+  left_join(shape_prv, by = "code_prv") %>% 
+  arrange(NAME_EN) %>% 
+  mutate(region = factor(region, 
+                         levels = c("Huabei\n(~North)",
+                                    "Dongbei\n(~Northeast)",
+                                    "Huadong\n(~East)",
+                                    "Zhongnan\n(~South)",
+                                    "Xinan\n(~Southwest)",
+                                    "Xibei\n(~Northwest)")),
+         NAME_EN = fct_reorder2(NAME_EN, desc(NAME_EN), region)) %>% 
+  dplyr::filter(scenario == "Population age distribution by county") %>% 
+  ggplot(., aes(x = NAME_EN, y = effect, color = region)) +
+  geom_point(position = position_dodge(width = 0.3)) +
+  geom_linerange(aes(ymin = `2.5 %`, ymax = `97.5 %`),
+                 position = position_dodge(width = 0.3)) +
+  geom_hline(yintercept = 1, linetype = 2) +
+  scale_color_manual(values = colors_region) +
   custom_theme +
-  theme(legend.position = "top",
+  theme(legend.position = "none",
         legend.text = element_text(size = 16)) +
-  labs(y = "Vaccine coverage", 
-       x = "Average Temperature", color = "") +
-  geom_hline(yintercept = 0) -> p_temp
+  labs(x = "",
+       y = "Relative mean difference") +
+  scale_x_discrete(guide = guide_axis(n.dodge = 3)) +
+  facet_grid(~region, drop = T, space = "free", scales = "free") -> p_prv
+
+# reg_tab %>% 
+#   dplyr::filter(cov_weighted <= 1) %>% 
+#   mutate(tier1 = code_prv %in% c(11, 12, 31, 50)) %>% 
+#   # dplyr::select(CNTY_CODE, code_prv, code_prf, year, cov_weighted, p_risk, p_risk_s, tier1) %>% 
+#   ggplot(., aes(x = temp, y = cov_weighted)) +
+#   stat_density_2d(aes(fill = ..level..), geom = "polygon", colour="grey") +
+#   # stat_density_2d(aes(fill = ..density..), geom = "raster", contour = FALSE) +
+#   scale_fill_distiller(palette="BuPu", direction=1) +
+#   # geom_point(alpha = 0.5) +
+#   # geom_smooth(color = "#c51b8a",
+#   #             fill = "#fa9fb5",
+#   #             method = "lm") +
+#   custom_theme +
+#   theme(legend.position = "bottom",
+#         legend.text = element_text(size = 16),
+#         legend.key.width = unit(2, "cm")) +
+#   # geom_hline(yintercept = 0) +
+#   labs(y = "Vaccine coverage", 
+#        x = "Average Temperature (°C)", 
+#        color = "",
+#        fill = "Density") -> p_temp
 
 
 # p_save <- plot_grid(p_prv, plot_grid(p_effect, p_under5, nrow = 1, axis = "l", align = "h"), ncol = 1)
-p_save <- plot_grid(p_effect, plot_grid(p_under5, p_temp, nrow = 1, axis = "l", align = "h"), nrow = 2, axis = "l", align = "h", rel_heights = c(5, 10)) + 
-  theme(plot.background = element_rect(fill = "white"))
-ggsave("figs/fig5_v3.png", p_save, width = 12, height = 12)
+#p_save <-
+
+plot_grid(
+  p_under5,
+  p_effect,
+  nrow = 1,
+  axis = "l",
+  align = "h",
+  labels = c("(B)", "(C)")
+) -> p_top
+  
+plot_grid(
+    p_top,
+    p_prv,
+    nrow = 2,
+    axis = "l",
+    align = "h",
+    rel_heights = c(5, 5),
+    labels = c("(A)", "")
+  ) +
+  theme(plot.background = element_rect(fill = "white",
+                                       colour = "white")) -> p_save
+
+ggsave("figs/fig5_v4.png", p_save, width = 12, height = 12)
+ 

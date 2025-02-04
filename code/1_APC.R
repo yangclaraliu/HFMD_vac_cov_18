@@ -181,6 +181,7 @@ data %>%
   mutate(year = as.numeric(year),
          code_prv = substr(CNTY_CODE, 1, 2))  -> reg_tab_2
 
+
 reg_tab_1 %>% 
   rename(SUR = value) %>% 
   dplyr::select(-metric) %>% 

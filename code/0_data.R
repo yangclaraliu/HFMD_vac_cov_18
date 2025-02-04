@@ -64,10 +64,18 @@ pop_all <- read_rds(paste0(path_dropbox_github, "pop_tar.rds")) %>%
                values_to = "pop")
 
 APC <- pop_all %>% 
-  dplyr::filter(ag_LL <= 5) %>% 
-  group_by(CNTY_CODE, code_prv, year) %>% 
-  summarise(APC = sum(pop)) %>% 
-  mutate(year = as.numeric(year))
+  dplyr::filter(ag_LL < 6) %>% 
+  pivot_wider(names_from = "ag_LL",
+              values_from = "pop") %>% 
+  mutate(APC = 0.5*`0` + `1` + `2` +`3` + `4` + `5`,
+         year = as.numeric(year)) %>% 
+  dplyr::select(CNTY_CODE, code_prv, year, APC)
+
+# APC <- pop_all %>% 
+#   dplyr::filter(ag_LL <= 5) %>% 
+#   group_by(CNTY_CODE, code_prv, year) %>% 
+#   summarise(APC = sum(pop)) %>% 
+#   mutate(year = as.numeric(year))
 
 pop_all %>% 
   group_by(CNTY_CODE, code_prv, year) %>% 
@@ -119,12 +127,33 @@ custom_theme <-
         strip.background = element_rect(fill = NA, color = "black")) 
 
 colors_region <- ggsci::pal_lancet()(6)
-cov <- read_rds(paste0(path_dropbox_github, "coverage_results_20240305.rds"))
-source("code/plot_fig1.R")
-source("code/plot_fig2_pop.R")
+cov <- read_rds(paste0(path_dropbox_github, "coverage_results_20250129.rds"))
+# source("code/plot_fig1.R")
+# source("code/plot_fig2_pop.R")
 
 pt_imputed <- readRDS("/Users/yangliu/Library/CloudStorage/Dropbox/Github_Data/vac2_cov_review/pt_imputed.rds") %>% 
   filter(lvl == "cty") %>% 
   dplyr::select(CNTY_CODE, edu, GDPpc, urban_prop, temp) %>% 
   .[complete.cases(.),]
 
+#### read in epi data ####
+epi <- read_excel(paste0(path_dropbox_github, "Copy of HFMDcountydata.xlsx")) %>% 
+  mutate(CNTY_CODE = substr(`地区编码`, 1,6)) %>% 
+  dplyr::select(-`地区名称`, -`地区编码`) %>% 
+  pivot_wider(names_from = `年份`,
+              values_from = `发病数`) %>% 
+  .[complete.cases(.),] %>% 
+  mutate(cases = `2009` + `2010` + `2011` + `2012` + `2013` + `2014` + `2015` + `2016`) %>% 
+  left_join(pop_all %>% 
+              dplyr::filter(year == 2016,
+                            ag_LL <= 5) %>% 
+              group_by(CNTY_CODE) %>% 
+              summarise(pop = sum(pop)),
+            by = "CNTY_CODE") %>% 
+  dplyr::filter(!is.na(pop)) %>% 
+  mutate(burden = (cases/8)/pop,
+         burden_s = (burden-mean(burden))/sd(burden))
+
+scientific_10 <- function(x) {
+  parse(text=gsub("e", " %*% 10^", scales::scientific_format()(x)))
+}

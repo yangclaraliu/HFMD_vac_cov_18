@@ -29,45 +29,44 @@ pop_to_plot %>%
   mutate(median_all = median(value)) %>% 
   group_by(year, birth_cohort, code_prv) %>% 
   mutate(median_prv = median(value)) -> p_tab
-# 
-# ggplot(p_tab, aes(x = value, group = birth_cohort)) +
-#   geom_density(fill = "black", alpha = 0.4, linetype = 2, adjust = 2) +
-#   geom_vline(aes(xintercept = median_all), linetype = 2) +
-#   geom_density(data = p_tab %>% dplyr::filter(code_prv == "11"),
-#                aes(x = value, group = birth_cohort), adjust = 2) +
-#   geom_vline(aes(xintercept = median_prv), color = "black", data = p_tab %>% dplyr::filter(code_prv == "11")) +
-#   facet_grid(birth_cohort~year) +
-#   custom_theme +
-#   labs(x = "Between-year relative changes in population sizes",
-#        y = "Density") +
-#   scale_y_continuous(sec.axis = sec_axis(~ . , name = "Birth cohort", breaks = NULL, labels = NULL)) +
-#   scale_x_continuous(sec.axis = sec_axis(~ . , name = "Calendar year", breaks = NULL, labels = NULL)) +
-#   geom_vline(xintercept = 0, color = "red") -> p_save
-# 
-# data.frame(loc = c("Beijing only", "All data available"),
-#            value = c(1,2),
-#            colors = factor(c("Baseline - No change", "Baseline - No change"))) %>% 
-#   ggplot(., aes(x = loc, y = value)) +
-#   geom_vline(aes(xintercept = value, linetype = loc, color = colors)) +
-#   scale_linetype_manual(values = c(2,1)) +
-#   # scale_color_manual(values = c("red","blue")) +
-#   labs(linetype = "",
-#        color = "") +
-#   theme_bw()+
-#   theme(legend.position = "bottom",
-#         #legend.key = element_rect(color = "black", fill = "white"),
-#         legend.text = element_text(size = 14)) -> fake_plot_to_get_legend
-# 
-# get_legend(fake_plot_to_get_legend) -> p_legend
-# 
-# plot_grid(p_save, p_legend,
-#           ncol = 1, rel_heights = c(30,1)) +
-#   theme(panel.background = element_rect(fill = "white"))
-# 
-# ggsave("figs/fig2_v2.png",
-#        width = 10,
-       height = 8)
 
+ggplot(p_tab, aes(x = value, group = birth_cohort)) +
+  geom_density(fill = "black", alpha = 0.4, linetype = 2, adjust = 2) +
+  geom_vline(aes(xintercept = median_all), linetype = 2) +
+  geom_density(data = p_tab %>% dplyr::filter(code_prv == "11"),
+               aes(x = value, group = birth_cohort), adjust = 2) +
+  geom_vline(aes(xintercept = median_prv), color = "black", data = p_tab %>% dplyr::filter(code_prv == "11")) +
+  facet_grid(birth_cohort~year) +
+  custom_theme +
+  labs(x = "Between-year relative changes in population sizes",
+       y = "Density") +
+  scale_y_continuous(sec.axis = sec_axis(~ . , name = "Birth cohort", breaks = NULL, labels = NULL)) +
+  scale_x_continuous(sec.axis = sec_axis(~ . , name = "Calendar year", breaks = NULL, labels = NULL)) +
+  geom_vline(xintercept = 0, color = "red") -> p_save
+
+data.frame(loc = c("Beijing only", "All data available"),
+           value = c(1,2),
+           colors = factor(c("Baseline - No change", "Baseline - No change"))) %>% 
+  ggplot(., aes(x = loc, y = value)) +
+  geom_vline(aes(xintercept = value, linetype = loc, color = colors)) +
+  scale_linetype_manual(values = c(2,1)) +
+  # scale_color_manual(values = c("red","blue")) +
+  labs(linetype = "",
+       color = "") +
+  theme_bw()+
+  theme(legend.position = "bottom",
+        #legend.key = element_rect(color = "black", fill = "white"),
+        legend.text = element_text(size = 14)) -> fake_plot_to_get_legend
+
+get_legend(fake_plot_to_get_legend) -> p_legend
+
+plot_grid(p_save, p_legend,
+          ncol = 1, rel_heights = c(30,1)) +
+  theme(panel.background = element_rect(fill = "white"))
+
+ggsave("figs/fig2_v2.png",
+       width = 10,
+       height = 8)
 
 pop_all %>% 
   mutate(birth_cohort = as.numeric(year) - ag_LL) %>% 
@@ -102,8 +101,8 @@ pop_to_plot %>%
   geom_segment(aes(x = stats_1, xend = stats_3,
                    y = NAME_EN, yend=NAME_EN)) +
   facet_grid(year~birth_cohort) +
-  geom_vline(xintercept = 0.1, linetype = 2) +
-  geom_vline(xintercept = -0.1, linetype = 2) +
+  geom_vline(xintercept = 0.2, linetype = 2) +
+  geom_vline(xintercept = -0.2, linetype = 2) +
   geom_vline(xintercept = 0, linetype = 1) +
   labs(x = "Relative change in population sizes\ncompared to the year before",
        y = "",

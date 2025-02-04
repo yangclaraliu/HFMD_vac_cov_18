@@ -1,23 +1,37 @@
+cov <- read_rds(paste0(path_dropbox_github, "coverage_results_20250129.rds")) 
 
-cov <- read_rds(paste0(path_dropbox_github, "coverage_results_20240305.rds")) %>% 
-  bind_rows(.id = "scenario")
-weights <- read_rds(paste0(path_dropbox_github, "weights_compare_20240305.rds")) 
-
-weights %>% 
+cov %>% 
+  dplyr::select(CNTY_CODE,
+                code_prf,
+                code_prv,
+                year,
+                ag_LL,
+                birth_cohort,
+                weights_pop,
+                weights_WU,
+                weights_HE) %>% 
   pivot_longer(cols = starts_with("weights")) %>% 
+  dplyr::filter(year == 2018) %>% 
   mutate(name = factor(name,
                        levels = c("weights_HE",
                                   "weights_WU",
-                                  "hi"),
-                       labels = c("He et al.",
+                                  "weights_pop"),
+                       labels = c("He",
                                   "Wu et al.",
-                                  "Population age distribution\nby country"))) %>% 
+                                  "Population age distribution\nby county"))) -> p_tab
+p_tab %>%   
   ggplot(.) +
-  geom_line(aes(x = ag_LL, y = pop_r, group = CNTY_CODE), alpha = 0.01) +
-  geom_point(aes(x = ag_LL, y = pop_r, group = CNTY_CODE), alpha = 0.01) +
-  geom_line(aes(x = ag_LL, y = value, group = name, color = name), size = 1.5) +
-  geom_point(aes(x = ag_LL, y = value, group = name, color = name), size = 3) +
+  geom_line(aes(x = ag_LL, 
+                y = value, 
+                group = interaction(name, CNTY_CODE), 
+                color = name, 
+                alpha = name, 
+                linewidth = name)) +
+  geom_point(aes(x = ag_LL, y = value, group = name, color = name, size = name, alpha = name)) +
   scale_color_manual(values = c("#c51b8a", "#756bb1", "black"), drop = F) +
+  scale_alpha_manual(values = c(1, 1, 0.01)) +
+  scale_linewidth_manual(values = c(1, 1, 0.2)) +
+  scale_size_manual(values = c(2, 2, 0.1)) +
   custom_theme + 
   theme(legend.text = element_text(size = 16),
         panel.border = element_rect(colour = "black", fill=NA),
@@ -25,36 +39,69 @@ weights %>%
   labs(y = "% of vaccines distributed\nto a specific age group",
        x = "Age",
        color = "") + 
-  guides(color=guide_legend(nrow=1,byrow=T)) -> p1
+  guides(color=guide_legend(nrow=1,byrow=T),
+         shape = F,
+         alpha = F,
+         linewidth = F, 
+         size = F) -> p1
   
 cov %>%
-  dplyr::select(CNTY_CODE, year, cov_weighted, scenario) %>% 
-  pivot_wider(names_from = scenario, values_from = cov_weighted) %>% 
-  pivot_longer(cols = c("HE","WU"))  %>% 
+  dplyr::filter(year == 2018, code_prv != 52) %>% 
+  dplyr::select(CNTY_CODE, year, coverage_weighted_pop, coverage_weighted_HE, coverage_weighted_WU, code_prv) %>% 
+  distinct() %>% 
+  pivot_longer(cols = c("coverage_weighted_HE",
+                        "coverage_weighted_WU")) %>% 
   mutate(name = factor(name,
-                       levels = c("HE",
-                                  "WU"),
-                       labels = c("He et al.",
-                                  "Wu et al."))) %>% 
-  ggplot(., aes(x = baseline, y = value, color = name)) +
+                       levels = c("coverage_weighted_HE",
+                                  "coverage_weighted_WU"),
+                       labels =  c("He",
+                                   "Wu et al."))) %>% 
+  ggplot(., aes(x = coverage_weighted_pop, y = value, color = name)) +
   geom_point(alpha = 0.5) +
   geom_abline(slope = 1, intercept = 0) +
   scale_color_manual(values = c("#c51b8a", "#756bb1")) +
   custom_theme + 
   theme(legend.text = element_text(size = 16),
-        panel.border = element_rect(colour = "black", fill=NA),
         strip.background = element_rect(colour = "black", fill = NA)) +
   labs(y = "Estimates with alternative assumptions",
        x = "Baseline estimate \n(based on population age distribution)",
        color = "") + 
-  guides(colour = guide_legend(override.aes = list(alpha = 1, size = 3),
+  geom_smooth(method = "lm") +
+  guides(colour = guide_legend(override.aes = list(alpha = 1, size = 3, fill = NA),
                                nrow=1,
-                               byrow=T)) -> p2
+                               byrow=T))  -> p2
 
 
-plot_grid(p1, p2, ncol = 1, align = "v", axis = "lr") -> p_save
+cov %>%
+  dplyr::filter(year == 2018, code_prv != 52) %>% 
+  dplyr::select(CNTY_CODE, year, coverage_weighted_pop, coverage_weighted_HE, coverage_weighted_WU, code_prv) %>% 
+  distinct() %>% 
+  pivot_longer(cols = c("coverage_weighted_HE",
+                        "coverage_weighted_WU")) %>% 
+  mutate(name = factor(name,
+                       levels = c("coverage_weighted_HE",
+                                  "coverage_weighted_WU"),
+                       labels =  c("He",
+                                   "Wu et al."))) -> reg_tab 
 
-ggsave("figs/fig4_v2.png", p_save, width = 7, height = 13)
+lm(data = reg_tab %>% dplyr::filter(name == "He"),
+   formula = value ~ coverage_weighted_pop) -> model_HE
+
+lm(data = reg_tab %>% dplyr::filter(name != "He"),
+   formula = value ~ coverage_weighted_pop) -> model_WU
+
+summary(model_HE)
+summary(model_WU)
+
+
+  plot_grid(p1, p2, ncol = 1, align = "v", axis = "lr") -> p_save
+
+  ggdraw() +
+  draw_plot(p_save) +
+  draw_label(label = "(A)", x = 0.05, y = 0.95, size = 14, fontface = "bold") +
+  draw_label(label = "(B)", x = 0.05, y = 0.47, size = 14, fontface = "bold") -> p_save_w_labels
+
+ggsave("figs/fig4_v2.png", p_save_w_labels, width = 7, height = 13)
 
  # EV71_Lit <- readRDS("data/EV71_Lit.rds") %>%
 #   filter(!(Age_LL_value == 0 & Age_UL_value %in% c(5,6)))
