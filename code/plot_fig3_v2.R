@@ -18,18 +18,21 @@ cov %>%
 p_tab %>% 
   group_by(year) %>% 
   summarise(min = min(coverage_weighted_pop),
+            median = median(coverage_weighted_pop),
             max = max(coverage_weighted_pop),
             national_Q1 = quantile(coverage_weighted_pop, 0.25, na.rm = T),
             national_Q2 = quantile(coverage_weighted_pop, 0.5, na.rm = T),
-            national_Q3 = quantile(coverage_weighted_pop, 0.75, na.rm = T))
+            national_Q3 = quantile(coverage_weighted_pop, 0.75, na.rm = T)) %>% View()
 
 p_tab %>% 
   group_by(year, names_region) %>% 
   summarise(min = min(coverage_weighted_pop),
+            md = median(coverage_weighted_pop),
             max = max(coverage_weighted_pop),
             national_Q1 = quantile(coverage_weighted_pop, 0.25, na.rm = T),
             national_Q2 = quantile(coverage_weighted_pop, 0.5, na.rm = T),
-            national_Q3 = quantile(coverage_weighted_pop, 0.75, na.rm = T))
+            national_Q3 = quantile(coverage_weighted_pop, 0.75, na.rm = T)) %>% 
+  dplyr::filter(year == 2019) %>% View()
 
 ggplot(p_tab) +
   # geom_rect(xmin = 0.5, xmax = 3.5, ymin = -Inf, ymax = Inf, fill = "grey90", alpha = 0.1) +
@@ -79,7 +82,7 @@ p_tab %>%
   left_join(shape_prv, by = "code_prv") -> p_tab2 
   
 p_tab2 %>% 
-  dplyr::filter(year == 2018) %>% 
+  dplyr::filter(year == 2019) %>% 
   ggplot(., aes(x = NAME_EN, y = var_coverage_weighted_pop_prf, color = names_region)) +
   geom_boxplot(outlier.shape = NA) +
   scale_color_manual(breaks = labels_region$names_region, values = colors_region) +
@@ -99,6 +102,18 @@ p_tab2 %>%
   guides(color=guide_legend(nrow=1,byrow=T)) -> p2
 
 p_tab2 %>% 
+  dplyr::select(year, names_region, 
+                var_coverage_weighted_pop_region_median) %>% 
+  distinct() %>% 
+  dplyr::filter(year == 2019)
+
+p_tab2 %>% 
+  dplyr::select(year, names_region, 
+                diff_coverage_weighted_pop_region_median) %>% 
+  distinct() %>% 
+  dplyr::filter(year == 2019) %>% View()
+
+p_tab2 %>% 
   dplyr::filter(year == 2018) %>% 
   ggplot(., aes(x = NAME_EN, y = diff_coverage_weighted_pop_prf, color = names_region)) +
   geom_boxplot(outlier.shape = NA) +
@@ -116,6 +131,8 @@ p_tab2 %>%
   labs(y = "Within prefecture absolute difference (i.e. max - min)\nin vaccine coverage, presented by province (2018)",
        x = "Province or provincial level cities") + 
   guides(color=guide_legend(nrow=1,byrow=T)) -> p3
+
+
 
 p_save <- plot_grid(p_legend, 
                     p2, p3, ncol = 1, 

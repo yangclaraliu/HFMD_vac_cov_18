@@ -48,7 +48,7 @@ M <- cor(reg_tab[,c("edu_s", "GDPpc_s", "urban_s", "temp_s", "burden_s", "p_risk
 corrplot(M, type="upper", order="hclust",
          col=brewer.pal(n=8, name="RdYlBu"))
 
-M <- cor(reg_tab[,c("edu", "GDPpc", "urban_prop", "temp", "burden", "p_risk", "tot", "code_prv")])
+M <- cor(reg_tab[,c("edu", "GDPpc", "urban_prop", "temp", "burden", "p_risk", "tot")])
 corrplot(M, type="upper", order="hclust",
          col=brewer.pal(n=8, name="RdYlBu"))
 
@@ -62,6 +62,7 @@ model_s <- lm(coverage_weighted_pop ~ edu_s + GDPpc_s + urban_s +
                 temp_s + 
                 burden_s + p_risk_s + tot_s + code_prv,
               data = reg_tab)
+
 model <- lm(coverage_weighted_pop ~ edu + GDPpc + urban_prop + temp + 
                 burden + p_risk + tot + code_prv,
               data = reg_tab)
@@ -171,6 +172,8 @@ model_summary_univariate <- list("p_risk" = summary(models$pop_univariate_s_p_ri
                                  "GDPpc" = summary(models$pop_univariate_s_GDPpc),
                                  "prv" = summary(models$pop_univariate_s_prv))
 
+model_summary_univariate
+
 #### sensitivity analysis regression ####
 # given that the final model is the full model, we will run the same thing
 # through again but using the other datasets
@@ -207,7 +210,7 @@ model_summary_main %>%
   rownames_to_column() %>% 
   dplyr::filter(!grepl("code_prv",rowname)) %>%
   dplyr::filter(!grepl("Intercept", rowname)) %>% 
-  dplyr::filter(scenario == "pop") %>% 
+  dplyr::filter(scenario == "WU") %>% 
   mutate(rowname = gsub(c("[0-9]"), "", rowname),
          rowname = str_remove_all(rowname, "\\."),
          rowname = factor(rowname,
@@ -276,8 +279,8 @@ model_summary_main %>%
   dplyr::filter(grepl("code_prv",rowname)) %>%
   separate(rowname, into = c("seg1", "code_prv", "seg3")) %>% 
   dplyr::select(-seg1, -seg3) %>% 
-  bind_rows(data.frame(code_prv = '11',
-                       scenario = "pop")) %>% 
+  bind_rows(data.frame(code_prv = c('11', "11", "11"),
+                       scenario = c("pop", "HE", "WU"))) %>% 
   replace(., is.na(.), 1) %>% 
   # dplyr::filter(scenario == "pop") %>% 
   mutate(code_prv = as.character(parse_number(code_prv)),
@@ -297,19 +300,27 @@ model_summary_main %>%
                                     "Xibei\n(~Northwest)")),
          NAME_EN = fct_reorder2(NAME_EN, desc(NAME_EN), region)) %>% 
   dplyr::filter(scenario == "Population age distribution by county") %>% 
+  # dplyr::filter(scenario == "HE") %>% 
+  # dplyr::filter(scenario == "WU et al.") %>% 
   ggplot(., aes(x = NAME_EN, y = effect, color = region)) +
-  geom_point(position = position_dodge(width = 0.3)) +
+  geom_point(position = position_dodge(width = 0.3), size = 3) +
   geom_linerange(aes(ymin = `2.5 %`, ymax = `97.5 %`),
                  position = position_dodge(width = 0.3)) +
   geom_hline(yintercept = 1, linetype = 2) +
   scale_color_manual(values = colors_region) +
   custom_theme +
-  theme(legend.position = "none",
-        legend.text = element_text(size = 16)) +
+  theme(legend.position = "top",
+        legend.text = element_text(size = 16),
+        strip.text = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
   labs(x = "",
-       y = "Relative mean difference") +
-  scale_x_discrete(guide = guide_axis(n.dodge = 3)) +
+       y = "Relative mean difference", 
+       color = "") +
+  guides(color = guide_legend(nrow = 1)) + 
+  # scale_x_discrete(guide = guide_axis(n.dodge = 3)) +
   facet_grid(~region, drop = T, space = "free", scales = "free") -> p_prv
+
+summary(tmp$effect)
 
 # reg_tab %>% 
 #   dplyr::filter(cov_weighted <= 1) %>% 
@@ -338,12 +349,13 @@ model_summary_main %>%
 #p_save <-
 
 plot_grid(
-  p_under5,
   p_effect,
+  p_under5,
+  rel_widths = c(6,4),
   nrow = 1,
   axis = "l",
   align = "h",
-  labels = c("(B)", "(C)")
+  labels = c("(A)", "(B)")
 ) -> p_top
   
 plot_grid(
@@ -353,10 +365,10 @@ plot_grid(
     axis = "l",
     align = "h",
     rel_heights = c(5, 5),
-    labels = c("(A)", "")
+    labels = c("", "(C)")
   ) +
   theme(plot.background = element_rect(fill = "white",
                                        colour = "white")) -> p_save
 
-ggsave("figs/fig5_v4.png", p_save, width = 12, height = 12)
+ggsave("figs/fig5_v4_WU.png", p_save, width = 12, height = 8)
  
