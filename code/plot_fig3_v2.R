@@ -22,7 +22,7 @@ p_tab %>%
             max = max(coverage_weighted_pop),
             national_Q1 = quantile(coverage_weighted_pop, 0.25, na.rm = T),
             national_Q2 = quantile(coverage_weighted_pop, 0.5, na.rm = T),
-            national_Q3 = quantile(coverage_weighted_pop, 0.75, na.rm = T)) %>% View()
+            national_Q3 = quantile(coverage_weighted_pop, 0.75, na.rm = T)) 
 
 p_tab %>% 
   group_by(year, names_region) %>% 
@@ -32,7 +32,7 @@ p_tab %>%
             national_Q1 = quantile(coverage_weighted_pop, 0.25, na.rm = T),
             national_Q2 = quantile(coverage_weighted_pop, 0.5, na.rm = T),
             national_Q3 = quantile(coverage_weighted_pop, 0.75, na.rm = T)) %>% 
-  dplyr::filter(year == 2019) %>% View()
+  dplyr::filter(year == 2018) %>% View()
 
 ggplot(p_tab) +
   # geom_rect(xmin = 0.5, xmax = 3.5, ymin = -Inf, ymax = Inf, fill = "grey90", alpha = 0.1) +
@@ -131,8 +131,6 @@ p_tab2 %>%
   labs(y = "Within prefecture absolute difference (i.e. max - min)\nin vaccine coverage, presented by province (2018)",
        x = "Province or provincial level cities") + 
   guides(color=guide_legend(nrow=1,byrow=T)) -> p3
-
-
 
 p_save <- plot_grid(p_legend, 
                     p2, p3, ncol = 1, 

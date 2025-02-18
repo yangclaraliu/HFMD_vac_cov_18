@@ -95,8 +95,10 @@ pop_to_plot %>%
   left_join(labels_region %>% mutate(labels_region = as.character(labels_region)), by = "labels_region") %>% 
   mutate(NAME_EN = factor(NAME_EN, level = rev(sort(unique(shape_prv$NAME_EN)))),
          birth_cohort = paste0("Children born in: ", birth_cohort),
-         year = paste0(year, " vs ", year - 1)) %>% 
-  ggplot(., aes(x = stats_2, y = (NAME_EN), color = labels_region)) +
+         year = paste0(year, " vs ", year - 1)) -> p_tab
+p_tab  
+
+ggplot(p_tab, aes(x = stats_2, y = (NAME_EN), color = labels_region)) +
   geom_point() +
   geom_segment(aes(x = stats_1, xend = stats_3,
                    y = NAME_EN, yend=NAME_EN)) +
