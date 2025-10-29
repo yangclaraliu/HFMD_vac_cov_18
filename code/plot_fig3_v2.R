@@ -67,7 +67,6 @@ p_save <- plot_grid(p_legend, p1, ncol = 1,
 
 ggsave("figs/fig2_v4.png", p_save, width = 10,  height = 10)
 
-
 p_tab %>% 
   mutate(diff_coverage_weighted_pop_prf = coverage_weighted_pop_prf_max - coverage_weighted_pop_prf_min,
          diff_coverage_weighted_pop_prv = coverage_weighted_pop_prv_max - coverage_weighted_pop_prv_min) %>% 
@@ -81,6 +80,13 @@ p_tab %>%
          var_coverage_weighted_pop_region_median = median(var_coverage_weighted_pop_prf, na.rm = T)) %>% 
   left_join(shape_prv, by = "code_prv") -> p_tab2 
   
+p_tab %>% 
+  dplyr::filter(names_region %in% c("Huabei\n(~North)", "Huadong\n(~East)"),
+                year == 2019) %>% 
+  group_by(names_region) %>% 
+  summarise(Q1 = quantile(coverage_weighted_pop,  0.5))
+
+
 p_tab2 %>% 
   dplyr::filter(year == 2019) %>% 
   ggplot(., aes(x = NAME_EN, y = var_coverage_weighted_pop_prf, color = names_region)) +

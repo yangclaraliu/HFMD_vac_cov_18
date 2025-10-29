@@ -34,7 +34,13 @@ cov %>%
   dplyr::filter(!code_prv %in% 52,
                 coverage_weighted_pop <= 1,
                 coverage_weighted_HE <= 1,
-                coverage_weighted_WU <= 1) -> reg_tab
+                coverage_weighted_WU <= 1) %>% 
+  dplyr::select(CNTY_CODE, year, starts_with("edu"), code_prv,
+                starts_with("urban"), starts_with("GDPpc"),
+                starts_with("temp"), starts_with("p_risk"),
+                starts_with("burden"), starts_with("tot"),
+                starts_with("coverage_weighted")) %>% 
+  distinct() -> reg_tab
 
 # model <- gamlss(cov_weighted ~ edu + GDPpc + urban_prop + p_risk + temp + tot + code_prv,
 #                 family = BEZI,
@@ -44,6 +50,7 @@ cov %>%
 #### check correlations ####
 library(corrplot)
 library(RColorBrewer)
+
 M <- cor(reg_tab[,c("edu_s", "GDPpc_s", "urban_s", "temp_s", "burden_s", "p_risk_s", "tot_s")])
 corrplot(M, type="upper", order="hclust",
          col=brewer.pal(n=8, name="RdYlBu"))
@@ -210,7 +217,7 @@ model_summary_main %>%
   rownames_to_column() %>% 
   dplyr::filter(!grepl("code_prv",rowname)) %>%
   dplyr::filter(!grepl("Intercept", rowname)) %>% 
-  dplyr::filter(scenario == "WU") %>% 
+  dplyr::filter(scenario == "HE") %>% 
   mutate(rowname = gsub(c("[0-9]"), "", rowname),
          rowname = str_remove_all(rowname, "\\."),
          rowname = factor(rowname,
@@ -320,7 +327,7 @@ model_summary_main %>%
   # scale_x_discrete(guide = guide_axis(n.dodge = 3)) +
   facet_grid(~region, drop = T, space = "free", scales = "free") -> p_prv
 
-summary(tmp$effect)
+# summary(tmp$effect)
 
 # reg_tab %>% 
 #   dplyr::filter(cov_weighted <= 1) %>% 
@@ -370,5 +377,22 @@ plot_grid(
   theme(plot.background = element_rect(fill = "white",
                                        colour = "white")) -> p_save
 
-ggsave("figs/fig5_v4_WU.png", p_save, width = 12, height = 8)
+ggsave("figs/fig5_v5_HE.png", p_save, width = 12, height = 10)
  
+ # response to review exercise: 2025/10/29
+
+
+
+reg_tab %>% 
+  dplyr::select(CNTY_CODE, code_prv, year, coverage_weighted_pop, p_risk) %>% 
+  mutate(rank_p_risk = ecdf(reg_tab$p_risk)(reg_tab$p_risk),
+         rank_cov = ecdf(reg_tab$coverage_weighted_pop)(reg_tab$coverage_weighted_pop)) %>% 
+  dplyr::filter(rank_p_risk >= 0.8 & rank_cov <= 0.2) %>% 
+  left_join(provinces %>% mutate(code_prv = substr(ZONECODE, 1, 2)), by = "code_prv") %>% 
+  mutate(PYNAME_short = word(PYNAME, 1)) %>% 
+  ggplot(., aes(x = PYNAME_short)) +
+  geom_bar(stat = "count") +
+  theme(axis.text =element_text(angle = 90))
+
+
+
