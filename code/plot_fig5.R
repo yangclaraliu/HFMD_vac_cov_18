@@ -15,6 +15,25 @@ pop_all %>%
   mutate(p_risk_s = (p_risk - mean(p_risk))/sd(p_risk),
          tot_s = (tot - mean(tot))/sd(tot)) -> pop_risk
 
+
+cov %>%
+  bind_rows(.id = "scenario") %>% 
+  left_join(pt_imputed %>% 
+              mutate(edu_s = (edu-mean(edu))/sd(edu),
+                     GDPpc_s = (GDPpc - mean(GDPpc))/sd(GDPpc),
+                     urban_s = (urban_prop-mean(urban_prop))/sd(urban_prop),
+                     temp_s = (temp-mean(temp))/sd(temp)), 
+            by = "CNTY_CODE") %>% 
+  left_join(epi %>% 
+              dplyr::select(CNTY_CODE, burden, burden_s),
+            by = "CNTY_CODE") %>% 
+  dplyr::filter(year == 2018) %>% 
+  left_join(pop_risk,
+            by = c("CNTY_CODE", "code_prv", "year")) %>% 
+  .[complete.cases(.),] %>% 
+  mutate(region = substr(CNTY_CODE, 1, 1)) %>% 
+  dplyr::filter(coverage_weighted_pop == 0) %>% View()
+
 cov %>%
   bind_rows(.id = "scenario") %>% 
   left_join(pt_imputed %>% 
@@ -85,6 +104,8 @@ models[["pop_full_s"]] <- gamlss(formula = coverage_weighted_pop ~ p_risk_s + to
                                             family = BEZI,
                                             data = reg_tab,
                                             trace = T)
+
+
 models[["pop_full_ns"]] <- gamlss(formula = coverage_weighted_pop ~ p_risk + tot + temp + edu + burden + urban_prop + GDPpc + code_prv,
                                  family = BEZI,
                                  data = reg_tab,
@@ -99,6 +120,7 @@ models[["pop_s_MC"]] <- gamlss(formula = coverage_weighted_pop ~ p_risk_s + tot_
                                  family = BEZI,
                                  data = reg_tab,
                                  trace = T)
+
 models[["pop_ns_MC"]] <- gamlss(formula = coverage_weighted_pop ~ p_risk + tot + temp + edu + burden + GDPpc + code_prv,
                                   family = BEZI,
                                   data = reg_tab,
@@ -379,10 +401,7 @@ plot_grid(
 
 ggsave("figs/fig5_v5_HE.png", p_save, width = 12, height = 10)
  
- # response to review exercise: 2025/10/29
-
-
-
+# response to review exercise: 2025/10/29
 reg_tab %>% 
   dplyr::select(CNTY_CODE, code_prv, year, coverage_weighted_pop, p_risk) %>% 
   mutate(rank_p_risk = ecdf(reg_tab$p_risk)(reg_tab$p_risk),
@@ -390,9 +409,52 @@ reg_tab %>%
   dplyr::filter(rank_p_risk >= 0.8 & rank_cov <= 0.2) %>% 
   left_join(provinces %>% mutate(code_prv = substr(ZONECODE, 1, 2)), by = "code_prv") %>% 
   mutate(PYNAME_short = word(PYNAME, 1)) %>% 
-  ggplot(., aes(x = PYNAME_short)) +
-  geom_bar(stat = "count") +
-  theme(axis.text =element_text(angle = 90))
+  mutate(PYNAME_short = factor(PYNAME_short, 
+                               levels = names(sort(table(PYNAME_short), decreasing = TRUE)))) %>% 
+  mutate(lvl_of_extreme = if_else(rank_p_risk >= 0.9 & rank_cov <= 0.1, "Top 10%ile at risk + Bottom 10%ile coverage", "Top 20%ile at risk + Bottom 20%ile coverage")) -> p_tab
+
+p_tab %>% 
+  dplyr::filter(lvl_of_extreme == "Top 10%ile at risk + Bottom 10%ile coverage") %>% 
+  group_by(PYNAME_short) %>% tally() %>% arrange(n)
+
+ggplot(p_tab, aes(x = PYNAME_short, fill = lvl_of_extreme)) +
+  geom_bar(stat = "count") + 
+  labs(fill = "",
+       x = "",
+       y = "Count") +
+  theme_bw() + 
+  theme(axis.text =element_text(angle = 90),
+        legend.position = "top") -> p_save
+
+ggsave("figs/fig5_R2R.png", p_save, width = 12, height = 10)
+
+p_tab %>% 
+  left_join(counties %>% mutate(CNTY_CODE = substr(CNTY_CODE, 1, 6)),
+            by = "CNTY_CODE") %>% 
+  dplyr::select(`NAME.y`,
+                `PYNAME.y`,
+                `PYNAME.x`,
+                lvl_of_extreme) %>% 
+  rename(province = `PYNAME.x`,
+         county = `PYNAME.y`,
+         county_CN = `NAME.y`) %>% 
+  mutate(province = word(province, 1)) %>% 
+  arrange(lvl_of_extreme) -> tmp
+
+write_csv(tmp, "p_risk_extreme.csv")
+
+# response to review exercise: 2025/10/30
+models[["pop_full_s_ziv"]] <- gamlss(formula = coverage_weighted_pop ~ p_risk_s + tot_s + temp_s + edu_s + burden_s + urban_s + GDPpc_s + code_prv,
+                                     family = BEZI,
+                                     sigma.formula = ~edu_s + GDPpc_s,
+                                     nu.formula = ~edu_s + GDPpc_s,
+                                     data = reg_tab,
+                                     trace = T)
 
 
+summary(models$pop_full_s)
+summary(models$pop_full_s_ziv)
 
+model_resid <- residuals(models$pop_full_s, what = "z-score")
+qqnorm(model_resid, main = "QQ plot of z-score residuals")
+qqline(model_resid)
